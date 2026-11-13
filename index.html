@@ -77,7 +77,7 @@ button{font-family:inherit;font-weight:700;border:0;border-radius:12px;min-width
 </script>
 </head>
 <body>
-<!-- build: 2026-11-13 pitagora6-3 -->
+<!-- build: 2026-11-13 pitagora6-4 -->
 <canvas id="c"></canvas>
 <div id="top">
   <div id="title">ピタゴラ６</div>
@@ -120,12 +120,13 @@ button{font-family:inherit;font-weight:700;border:0;border-radius:12px;min-width
     <li><span class="ic">👆</span>ゆびで うごかす。↺ ↻ で むきを かえる</li>
     <li><span class="ic">▶</span>「スタート」で <ruby>玉<rt>たま</rt></ruby>が さかを ころがる。ゴールに <ruby>入<rt>はい</rt></ruby>れば せいこう！</li>
     <li><span class="ic">⏪</span><ruby>止<rt>と</rt></ruby>まったら「<ruby>時間<rt>じかん</rt></ruby>」の バーで まきもどして、たしかめよう</li>
+    <li><span class="ic">┅</span><ruby>青<rt>あお</rt></ruby>い <ruby>点線<rt>てんせん</rt></ruby>は <ruby>玉<rt>たま</rt></ruby>の すすむ みち。◎で とまるよ</li>
     <li><span class="ic">🆕</span>レベル1〜3は、あたらしい パーツを ひとつずつ おぼえる れんしゅう。<span style="background:#e03131;color:#fff;border-radius:8px;padding:0 6px;font-size:13px">NEW</span>の パーツを つかってみよう</li>
     <li><span class="ic">🔄</span>「<ruby>視点<rt>してん</rt></ruby>」ボタンを おすと、なにも ない ところを ゆびで なぞって <ruby>見<rt>み</rt></ruby>る むきを かえられる（もう1<ruby>回<rt>かい</rt></ruby>おすと もどる）</li>
   </ol>
   <button id="startBtn">はじめる</button>
 </div></div>
-<div id="ver">v2026-11-13 ピタゴラ６-3</div>
+<div id="ver">v2026-11-13 ピタゴラ６-4</div>
 
 <script type="module">
 import * as THREE from 'three';
@@ -140,67 +141,79 @@ const CFG = {
   RAMP_H: [1, 2, 3],        // スタートの坂の高さ（ひくい・ふつう・たかい）
   RAMP_V: [4.6, 6.1, 7.4],  // 坂を下りきったときの玉の速さ（進む距離＝速さ×速さ÷(2×ROLL_DECEL)）
   ROLL_DECEL: 1.25,         // 床を転がる玉が遅くなる強さ（大きいほど早く止まる）
-  WALL_H: 0.9,              // かべの高さ
-  WALL_BOUNCE: 0.9,         // かべで はね返る強さ（0〜1）
+  WALL_L: 4, WALL_H: 0.9,   // かべの長さと高さ
+  WALL_BOUNCE: 0.95,        // かべで はね返ったあとの速さの わりあい（0〜1）
   DOMINO: { h:1.8, t:0.24, w:1.0, m:0.4, step:1.0 },   // ドミノ：高さ・厚さ・幅・重さ・5まいセットの間隔
+  DOMINO_PUSH_V: 4.5,       // たおれた ドミノに おされた玉の速さ
   SPRING_V: [5.5, 7.5, 9.5],    // ばねの強さ（よわい・ふつう・つよい）
   SPRING_HIT: 0.65,         // ばねの台のまん中から、この距離に入った玉を打ち出す
-  SPIN_W: 2.5,              // かざぐるまの回る速さ
+  CHIME_HIT: 0.7,           // てっきんの まん中の線から、この距離までの玉で鳴る
   GOAL_R: 1.15,             // ゴールの半径（この中に入った玉は吸いよせて止める）
+  GATE_R: 1.55,             // ゴールの とびら（さく）の半径
+  GUIDE_MAX: 30, GUIDE_K: 0.94,   // よそく線の いちばん長い長さ／長さの ほせい（ころがる時の回転のぶん、実際は少し手前で止まる）
   TIME_LIMIT: 25, MAX_PARTS: 40, MAX_DOMINO: 40, GRID: 0.5
 };
 // 床の大きさ。x＝左右（0〜W）、z＝おく・手前（0がおく、Hが手前）、y＝高さ
 const BOARD = { W: 28, H: 18 };
 const NOTE_NAMES = ['ド','レ','ミ','ファ','ソ','ラ','シ','ド'];
-// w＝向いている方向の長さ、d＝横幅（えらぶときの当たり判定） rot＝15°きざみで回せる（24で1周）
+// w＝向いている方向の長さ、d＝横幅（えらぶときの当たり判定） rot＝15°きざみで回せる（24で1周） tip＝えらんだときに出る説明
 const PARTS = {
-  ramp:   { tip:'さかの たかさを かえると、<ruby>玉<rt>たま</rt></ruby>の いきおいが かわるよ。↺ ↻ で やじるしの <ruby>向<rt>む</rt></ruby>きを かえよう', name:'さか', w:4.2, d:1.6, rot:24, max:3, opt:{ label:'たかさ', names:['ひくい','ふつう','たかい'] }, opt0:1 },
-  ball:   { tip:'うごかない <ruby>玉<rt>たま</rt></ruby>。ドミノや <ruby>玉<rt>たま</rt></ruby>が ぶつかると ころがるよ', name:'たま', w:1, d:1, max:3 },
-  wallL:  { tip:'かべに あたった <ruby>玉<rt>たま</rt></ruby>は はねかえるよ。<ruby>角度<rt>かくど</rt></ruby>を ↺ ↻ で かえて ねらおう', name:'ながい かべ', w:6, d:0.3, rot:24 },
-  wallS:  { tip:'かべに あたった <ruby>玉<rt>たま</rt></ruby>は はねかえるよ。<ruby>角度<rt>かくど</rt></ruby>を ↺ ↻ で かえて ねらおう', name:'みじかい かべ', w:3, d:0.3, rot:24 },
-  domino: { tip:'ドミノを ならべて、じゅんばんに たおそう。<ruby>玉<rt>たま</rt></ruby>に あたると おし<ruby>出<rt>だ</rt></ruby>すよ', name:'ドミノ', w:0.24, d:1.0, rot:24, dom:1 },
-  domino5:{ tip:'ドミノが 5まい ならんだ セット。↺ ↻ で <ruby>向<rt>む</rt></ruby>きを あわせよう', name:'ドミノ 5まい', w:4.24, d:1.0, rot:24, dom:5 },
-  spring: { tip:'のった <ruby>玉<rt>たま</rt></ruby>を やじるしの <ruby>向<rt>む</rt></ruby>きに とばすよ。やじるしの かずが つよさ', name:'ばね', w:1.6, d:1.6, rot:24, opt:{ label:'つよさ', names:['よわい','ふつう','つよい'] }, opt0:1 },
-  spinner:{ tip:'くるくる まわる しかけ。さわった <ruby>玉<rt>たま</rt></ruby>は はじかれるよ（おまけ）', name:'かざぐるま', w:4, d:4, opt:{ label:'むき', names:['みぎまわり','ひだりまわり'] } },
-  chime:  { tip:'うえを <ruby>玉<rt>たま</rt></ruby>が とおると おとが なるよ。ボタンで おとを かえられる', name:'てっきん', w:1.8, d:0.5, rot:24, opt:{ label:'おと', names:NOTE_NAMES } },
-  goal:   { tip:'ここに <ruby>玉<rt>たま</rt></ruby>が <ruby>入<rt>はい</rt></ruby>れば せいこう！', name:'ゴール', w:2.6, d:2.6, max:1 }
+  ramp:   { name:'さか', w:4.2, d:1.6, rot:24, max:3, opt:{ label:'たかさ', names:['ひくい','ふつう','たかい'] }, opt0:1,
+            tip:'さかが <ruby>高<rt>たか</rt></ruby>いほど、<ruby>玉<rt>たま</rt></ruby>は とおくまで いくよ。<ruby>点線<rt>てんせん</rt></ruby>の ◎で とまる' },
+  ball:   { name:'たま', w:1, d:1, max:3, tip:'おいた <ruby>玉<rt>たま</rt></ruby>は じっと している。ドミノや <ruby>玉<rt>たま</rt></ruby>が ぶつかると ころがりだすよ' },
+  wall:   { name:'かべ', w:4, d:0.3, rot:24, tip:'かべに あたった <ruby>玉<rt>たま</rt></ruby>は はねかえるよ。↺ ↻ で ななめに すると、<ruby>玉<rt>たま</rt></ruby>の <ruby>向<rt>む</rt></ruby>きが かわる' },
+  domino: { name:'ドミノ', w:0.24, d:1.0, rot:24, dom:1, tip:'ドミノは たおれて、つぎの ドミノや <ruby>玉<rt>たま</rt></ruby>を おすよ' },
+  domino5:{ name:'ドミノ 5まい', w:4.24, d:1.0, rot:24, dom:5, tip:'ドミノ 5まいの セット。つなげて ならべると、とおくまで つたわるよ' },
+  spring: { name:'ばね', w:1.6, d:1.6, rot:24, opt:{ label:'つよさ', names:['よわい','ふつう','つよい'] }, opt0:1,
+            tip:'のった <ruby>玉<rt>たま</rt></ruby>を やじるしの <ruby>向<rt>む</rt></ruby>きに とばすよ。<ruby>点線<rt>てんせん</rt></ruby>が とぶ みち' },
+  chime:  { name:'てっきん', w:1.8, d:0.5, rot:24, opt:{ label:'おと', names:NOTE_NAMES }, tip:'うえを <ruby>玉<rt>たま</rt></ruby>が とおると おとが なるよ。ボタンで おとを かえられる' },
+  goal:   { name:'ゴール', w:2.6, d:2.6, max:1, tip:'ここに <ruby>玉<rt>たま</rt></ruby>が <ruby>入<rt>はい</rt></ruby>れば せいこう！' }
 };
 const ANG = k => (k||0)*Math.PI/12;
 // 向き a のときの「前」は (cos a, 0, -sin a)。a=0 で右、a=90°で おく（画面の上）
 const fwd = a => ({ x:Math.cos(a), z:-Math.sin(a) });
+// よそく線：坂やばねから、玉が まっすぐ進んで止まるまでの線（わくに当たる所で切る）
+function guideOf(p){ let sx,sz,v; const a=ANG(p.rot), f=fwd(a);
+  if(p.type==='ramp'){ sx=p.x+f.x*CFG.RAMP_L/2; sz=p.z+f.z*CFG.RAMP_L/2; v=CFG.RAMP_V[p.opt||0]; }
+  else if(p.type==='spring'){ sx=p.x; sz=p.z; v=CFG.SPRING_V[p.opt||0]; } else return null;
+  let len=Math.min(CFG.GUIDE_MAX, CFG.GUIDE_K*v*v/(2*CFG.ROLL_DECEL)), stop=true; const m=CFG.BALL_R;
+  for(const [c,d,lo,hi] of [[sx,f.x,m,BOARD.W-m],[sz,f.z,m,BOARD.H-m]]){
+    if(d>1e-6&&c+d*len>hi){ len=(hi-c)/d; stop=false; } if(d<-1e-6&&c+d*len<lo){ len=(lo-c)/d; stop=false; } }
+  return { x:sx, z:sz, f, len:Math.max(0,len), stop }; }
 
 // 物理シミュレーション本体（Node.js でも同じコードで検証できるよう、描画と分けています）
 // 床バージョンは完全な3Dの物理です（壁バージョンのような z 固定はしていません）
-function createFloorSim(C, layout, eps, need){
-  eps=eps||0; need=need||{}; const R=CFG.BALL_R, H=CFG.H;
+function createFloorSim(C, layout, eps){
+  eps=eps||0; const R=CFG.BALL_R, H=CFG.H;
   const world=new C.World(); world.gravity.set(0,-CFG.G*(1+eps),0); world.solver.iterations=20; world.allowSleep=false;
   const M={}; ['ball','st','wall','dom','bar'].forEach(k=>M[k]=new C.Material(k));
   const cm=(a,b,f,r)=>world.addContactMaterial(new C.ContactMaterial(M[a],M[b],{friction:f,restitution:r}));
   cm('ball','st',0.5,0.1); cm('ball','wall',0.1,CFG.WALL_BOUNCE); cm('ball','dom',0,0.1); cm('dom','dom',0,0); cm('dom','st',0.6,0);
   cm('dom','wall',0.3,0); cm('ball','bar',0.1,0.7); cm('ball','ball',0.1,0.6); cm('dom','bar',0.3,0);
-  const parts=[], dyn=[], events=[], deco=[], fires=[], Y=new C.Vec3(0,1,0), Zax=new C.Vec3(0,0,1);
+  const parts=[], dyn=[], events=[], deco=[], fires=[], rings=[], Y=new C.Vec3(0,1,0), Zax=new C.Vec3(0,0,1);
   const qy=a=>{ const q=new C.Quaternion(); q.setFromAxisAngle(Y,a); return q; };
   // 動かない箱。sx,sy,sz＝大きさ（全長）
   function box(x,y,z,sx,sy,sz,q,o){ o=o||{};
     const b=new C.Body({mass:0, material:M[o.mat||'st']}); b.addShape(new C.Box(new C.Vec3(sx/2,sy/2,sz/2))); b.position.set(x,y,z); if(q) b.quaternion.copy(q);
-    world.addBody(b); parts.push({body:b,sx,sy,sz,look:o.look||'wood',idx:o.idx||0,pi:o.pi===undefined?-1:o.pi}); return b; }
+    world.addBody(b); parts.push({body:b,sx,sy,sz,look:o.look||'wood',idx:o.idx||0,pi:o.pi===undefined?-1:o.pi,gate:!!o.gate}); return b; }
   function addDyn(b,kind,extra){ world.addBody(b); dyn.push(Object.assign({body:b,kind},extra||{})); return b; }
   box(BOARD.W/2,-0.5,BOARD.H/2,BOARD.W+30,1,BOARD.H+30,null,{look:'ground'});
   // まわりの わく（玉が外に出ないように）
   const FT=0.6, FH=1.0;
   box(BOARD.W/2,FH/2,-FT/2,BOARD.W+FT*2,FH,FT,null,{look:'frame',mat:'wall'}); box(BOARD.W/2,FH/2,BOARD.H+FT/2,BOARD.W+FT*2,FH,FT,null,{look:'frame',mat:'wall'});
   box(-FT/2,FH/2,BOARD.H/2,FT,FH,BOARD.H,null,{look:'frame',mat:'wall'}); box(BOARD.W+FT/2,FH/2,BOARD.H/2,FT,FH,BOARD.H,null,{look:'frame',mat:'wall'});
-  const balls=[], spinners=[], springs=[], ramps=[], chimes=[]; let goal=null, slowMovers=false, nDom=0;
-  const s={ world, parts, dyn, events, deco, fires, t:0, steps:0, status:'run', failWhy:'', info:{} };
-  const rung=new Set(), spun=new Set(), walled=new Set();   // 鳴らしたてっきん／さわったかざぐるま（お題の条件に使う）
+  const balls=[], went=[], springs=[], ramps=[], chimes=[], gate=[]; let goal=null, nDom=0, gateNeed=0;
+  const s={ world, parts, dyn, events, deco, fires, rings, t:0, steps:0, status:'run', failWhy:'', gateOpenT:-1, info:{} };
+  const rung=new Set(), pushes=[], bounces=[], prevV=[];   // 鳴らした てっきん（ゴールの とびらを ひらくのに使う）
   function addBall(x,y,z,pi){ const b=new C.Body({mass:1,material:M.ball}); b.addShape(new C.Sphere(R)); b.position.set(x,y,z); b.linearDamping=0.02; b.angularDamping=0.02;
     b.addEventListener('collide',e=>{ const v=Math.abs(e.contact.getImpactVelocityAlongNormal());
       if(e.body.material===M.ball&&v>0.8) events.push({k:'clack'}); else if(e.body.material===M.wall&&v>1.5) events.push({k:'knock'}); });
-    addDyn(b,'ball',{pi,n:balls.length}); balls.push(b); }
+    addDyn(b,'ball',{pi,n:balls.length}); balls.push(b); went.push(false); }
   function addDomino(x,z,a,pi){ const d=CFG.DOMINO, b=new C.Body({mass:d.m,material:M.dom}); b.addShape(new C.Box(new C.Vec3(d.t/2,d.h/2,d.w/2)));
     b.position.set(x,d.h/2+0.002,z); b.quaternion.copy(qy(a)); b.linearDamping=0.05; b.angularDamping=0.05;
-    b.addEventListener('collide',e=>{ if(e.body.material!==M.st&&Math.abs(e.contact.getImpactVelocityAlongNormal())>1.2) events.push({k:'tok'}); }); addDyn(b,'domino',{pi,i:nDom++}); }
-  layout.forEach((p,pi)=>{ const a=ANG(p.rot), x=p.x, z=p.z, o=p.opt||0, f=fwd(a), wood=p.lock?'locked':'wood';
+    b.addEventListener('collide',e=>{ if(e.body.material!==M.st&&Math.abs(e.contact.getImpactVelocityAlongNormal())>1.2) events.push({k:'tok'});
+      if(e.body.material===M.ball) pushes.push({dom:b,ball:e.body}); }); addDyn(b,'domino',{pi,i:nDom++}); }
+  layout.forEach((p,pi)=>{ const a=ANG(p.rot), x=p.x, z=p.z, o=p.opt||0, f=fwd(a), wood=p.lock===true?'locked':'wood';
     // 部品の中の位置 (lx,ly,lz) → 世界の位置
     const W=(lx,ly,lz)=>[x+lx*f.x+lz*Math.sin(a), ly, z+lx*f.z+lz*Math.cos(a)];
     if(p.type==='ball') addBall(x+eps*0.5,R+0.003,z,pi);
@@ -213,63 +226,78 @@ function createFloorSim(C, layout, eps, need){
       const xc=-L/2+0.55, ys=h*(L/2-xc)/L; const bp=W(xc+R*sn,ys+R*cs+0.003,0); addBall(bp[0]+eps*0.3*f.x,bp[1],bp[2]+eps*0.3*f.z,pi);
       ramps.push({ball:balls[balls.length-1],x,z,f,v:CFG.RAMP_V[o],done:false});
       deco.push({k:'ramp',x,z,a,h,pi,lock:p.lock}); }
-    else if(p.type==='wallL'||p.type==='wallS'){ const wb=box(x,CFG.WALL_H/2,z,PARTS[p.type].w,CFG.WALL_H,0.3,qy(a),{look:wood,mat:'wall',pi});
-      wb.addEventListener('collide',e=>{ if(balls.includes(e.body)) walled.add(pi); }); }
+    else if(p.type==='wall'){ const wb=box(x,CFG.WALL_H/2,z,CFG.WALL_L,CFG.WALL_H,0.3,qy(a),{look:wood,mat:'wall',pi});
+      wb.addEventListener('collide',e=>{ const bi=balls.indexOf(e.body); if(bi>=0) bounces.push({bi,nx:-f.z,nz:f.x,wx:x,wz:z,ends:false}); }); }
     else if(p.type==='domino') addDomino(x,z,a,pi);
     else if(p.type==='domino5'){ for(let i=0;i<5;i++){ const w=W((i-2)*CFG.DOMINO.step,0,0); addDomino(w[0],w[2],a,pi); } }
     else if(p.type==='spring'){ springs.push({pi,x,z,f,v:CFG.SPRING_V[o],last:-1}); deco.push({k:'spring',x,z,a,o,pi}); }   // ばねは床の台。玉が乗ると矢印の向きに打ち出す
-    else if(p.type==='spinner'){ const b=new C.Body({mass:0,type:C.Body.KINEMATIC,material:M.wall}); b.addShape(new C.Box(new C.Vec3(2,0.4,0.15)));
-      b.addShape(new C.Box(new C.Vec3(2,0.4,0.15)),new C.Vec3(0,0,0),qy(Math.PI/2)); b.position.set(x,0.5,z);
-      b.addEventListener('collide',e=>{ if(balls.includes(e.body)) spun.add(pi); });
-      world.addBody(b); dyn.push({body:b,kind:'spinner',pi}); spinners.push({b,w:o?CFG.SPIN_W:-CFG.SPIN_W}); deco.push({k:'hub',x,z,pi}); slowMovers=true; }
     else if(p.type==='chime'){ chimes.push({pi,x,z,f,o,last:-1}); deco.push({k:'chime',x,z,a,o,pi}); }   // てっきんは床にはった板。玉が上を通ると鳴る（当たり判定はなし）
-    else if(p.type==='goal'){ goal={x,z}; deco.push({k:'goal',x,z,pi,lock:p.lock}); }
+    else if(p.type==='goal'){ goal={x,z}; gateNeed=o; deco.push({k:'goal',x,z,pi,lock:p.lock,need:o});
+      // opt＞0 のゴールは「とびら」つき：てっきんを opt こ 鳴らすまで、まわりの さくが 玉を通さない
+      if(o>0) for(let i=0;i<12;i++){ const t=i/12*Math.PI*2; gate.push(box(x+Math.cos(t)*CFG.GATE_R,0.5,z+Math.sin(t)*CFG.GATE_R,0.25,1.0,0.25,null,{look:'gate',mat:'wall',pi,gate:true})); } }
   });
-  s.info={goal, balls:balls.length}; s.rung=rung; s.spun=spun; s.walled=walled;
+  s.info={goal, balls:balls.length, gateNeed}; s.rung=rung;
   const movers=dyn.filter(d=>d.kind==='ball'||d.kind==='domino');
-  let winT=0, stallT=0; const stallLim=slowMovers?3:1.5;
+  let winT=0, stallT=0;
   s.step=function(){
     if(s.status!=='run') return;
-    for(const sp of spinners){ sp.b.quaternion.setFromAxisAngle(Y,sp.w*s.t); sp.b.angularVelocity.set(0,sp.w,0); }
+    balls.forEach((b,i)=>{ prevV[i]=[b.velocity.x,b.velocity.z]; });
     world.step(H); s.t+=H; s.steps++;
+    // かべ：玉を 鏡のように きれいに はねかえす（まさつで 向きや 速さが くるわないように するチート）
+    while(bounces.length){ const q=bounces.shift(), b=balls[q.bi], pv=prevV[q.bi]; if(!pv) continue; let nx=q.nx, nz=q.nz;
+      if((b.position.x-q.wx)*nx+(b.position.z-q.wz)*nz<0){ nx=-nx; nz=-nz; }   // かべの 玉がわを むく 向き
+      const vn=pv[0]*nx+pv[1]*nz; if(vn>-0.3) continue;                      // かべに むかって いない／かべの はしに かすった
+      const k=CFG.WALL_BOUNCE, ox=pv[0]-2*vn*nx, oz=pv[1]-2*vn*nz; b.velocity.set(ox*k,0,oz*k);
+      b.angularVelocity.set(oz*k/R,0,-ox*k/R); }
     // ばね：どの向きから乗っても、玉を台のまん中に置き直してから矢印の向きに打ち出す（毎回同じ飛び方にするためのチート）
     for(const f of springs){ if(s.t-f.last<0.4) continue;
       for(const b of balls){ const bp=b.position; if(bp.y>R+0.3||Math.abs(bp.x-f.x)>CFG.SPRING_HIT||Math.abs(bp.z-f.z)>CFG.SPRING_HIT) continue;
         f.last=s.t; bp.set(f.x,R+0.003,f.z); b.velocity.set(f.f.x*f.v,0,f.f.z*f.v); b.angularVelocity.set(f.f.z*f.v/R,0,-f.f.x*f.v/R);
         fires.push({pi:f.pi,t:s.t}); events.push({k:'spring'}); break; } }
+    // たおれてきた ドミノが 玉に あたったら、玉を ドミノの たおれる向きに 決まった速さで ころがす（毎回同じ動きにするチート）
+    while(pushes.length){ const {dom,ball}=pushes.shift(); const w=dom.angularVelocity, bv=ball.velocity;
+      if(Math.hypot(w.x,w.z)<1.0||Math.hypot(bv.x,bv.z)>2) continue;   // 立っている ドミノに 玉が ぶつかった ときは なにもしない
+      const n=dom.quaternion.vmult(new C.Vec3(1,0,0)); let nx=n.x, nz=n.z; const l=Math.hypot(nx,nz)||1; nx/=l; nz/=l;
+      if((ball.position.x-dom.position.x)*nx+(ball.position.z-dom.position.z)*nz<0){ nx=-nx; nz=-nz; }
+      const V=CFG.DOMINO_PUSH_V; bv.set(nx*V,0,nz*V); ball.angularVelocity.set(nz*V/R,0,-nx*V/R); }
     // 坂を下りきった玉は、決まった速さにそろえる（毎回同じ距離を進むようにするチート）
     for(const r of ramps){ if(r.done) continue; const p=r.ball.position, v=r.ball.velocity;
       if(p.y<CFG.BALL_R+0.12&&(p.x-r.x)*r.f.x+(p.z-r.z)*r.f.z>CFG.RAMP_L/2-0.1){ r.done=true;
         if(v.x*r.f.x+v.z*r.f.z>1){ v.set(r.f.x*r.v,0,r.f.z*r.v); r.ball.angularVelocity.set(r.f.z*r.v/R,0,-r.f.x*r.v/R); } } }
-    let inGoal=false;
-    for(const b of balls){ const p=b.position, v=b.velocity;
-      if(p.y<R+0.3) for(const c of chimes){ const dx=p.x-c.x, dz=p.z-c.z; if(Math.abs(dx*c.f.x+dz*c.f.z)<0.9&&Math.abs(dx*c.f.z-dz*c.f.x)<0.4&&s.t-c.last>0.4){ c.last=s.t; rung.add(c.pi); events.push({k:'bar',i:c.o}); } }
+    let inGoal=false; const open=gateNeed===0||s.gateOpenT>=0;
+    balls.forEach((b,bi)=>{ const p=b.position, v=b.velocity;
+      if(p.y<R+0.3) for(const c of chimes){ const dx=p.x-c.x, dz=p.z-c.z;
+        if(Math.abs(dx*c.f.x+dz*c.f.z)<0.9&&Math.abs(dx*c.f.z-dz*c.f.x)<CFG.CHIME_HIT&&s.t-c.last>0.4){ c.last=s.t; rung.add(c.pi); rings.push({pi:c.pi,t:s.t,n:rung.size}); events.push({k:'bar',i:c.o}); } }
       if(p.y<R+0.08){ const sp=Math.hypot(v.x,v.z); if(sp>1e-6){ const k=Math.max(0,sp-CFG.ROLL_DECEL*H)/sp; v.x*=k; v.z*=k; b.angularVelocity.scale(k,b.angularVelocity); } }   // 床の ころがり抵抗
-      if(goal&&p.y<R+0.5){ const dx=goal.x-p.x, dz=goal.z-p.z;
-        if(Math.hypot(dx,dz)<CFG.GOAL_R){ inGoal=true; v.x=v.x*0.9+dx*0.3; v.z=v.z*0.9+dz*0.3; b.angularVelocity.scale(0.9,b.angularVelocity); } } }   // ゴールは玉を吸いよせる（チート）
+      // ゴールは玉を吸いよせる（チート）。いちども ころがって いない玉（ゴールに おいただけの玉）は かぞえない
+      if(Math.hypot(v.x,v.z)>1.5) went[bi]=true;
+      if(goal&&open&&went[bi]&&p.y<R+0.5){ const dx=goal.x-p.x, dz=goal.z-p.z;
+        if(Math.hypot(dx,dz)<CFG.GOAL_R){ inGoal=true; v.x=v.x*0.9+dx*0.3; v.z=v.z*0.9+dz*0.3; b.angularVelocity.scale(0.9,b.angularVelocity); } } });
+    // てっきんが そろったら とびらを ひらく（さくを 床の下へ）
+    if(gateNeed>0&&s.gateOpenT<0&&rung.size>=gateNeed){ s.gateOpenT=s.t; for(const g of gate){ g.position.y=-50; g.aabbNeedsUpdate=true; } events.push({k:'gate'}); }
     winT=inGoal?winT+H:0;
-    const okNeed=rung.size>=(need.chime||0)&&spun.size>=(need.spinner||0)&&walled.size>=(need.wall||0);
-    if(winT>0.4&&okNeed){ s.status='win'; events.push({k:'win'}); return; }
+    if(winT>0.4){ s.status='win'; events.push({k:'win'}); return; }
     let mx=0; for(const d of movers){ if(d.body.position.y<-3) continue; const v=d.body.velocity.length()+d.body.angularVelocity.length()*0.3; if(v>mx) mx=v; }
     stallT=(mx<0.25&&s.t>1)?stallT+H:0;
-    if(stallT>stallLim||s.t>CFG.TIME_LIMIT){ s.status='fail'; s.failWhy=winT>0.4||inGoal?'need':'goal'; events.push({k:'fail'}); }
+    if(stallT>1.5||s.t>CFG.TIME_LIMIT){ s.status='fail'; s.failWhy=(gateNeed>0&&s.gateOpenT<0)?'gate':'goal'; events.push({k:'fail'}); }
   };
   return s;
 }
-// お題（lock＝動かせない部品） allow＝使えるパーツ
-const P=(type,x,z,rot,opt,lock)=>({type,x,z,rot:rot||0,opt:opt||0,lock:!!lock});
-// レベル1〜3は「パーツのチュートリアル」： new＝このレベルで はじめて出てくるパーツ（NEWの印がつく） need＝ゴールのほかに必要な条件
+// お題（lock：true＝動かせない、'pos'＝場所と向きは そのままで せってい（たかさ など）だけ かえられる）
+const P=(type,x,z,rot,opt,lock)=>({type,x,z,rot:rot||0,opt:opt||0,lock:lock||false});
+// レベル1〜3は「パーツのチュートリアル」。どのレベルも、新しいパーツを使わないと ゴールに とどかない ように おいてある
+// new＝このレベルで はじめて出てくるパーツ（NEWの印がつく）
 const LEVELS = [
-  { tab:'1', mission:'<ruby>新<rt>あたら</rt></ruby>しい パーツ：<b>さか</b>と<b>かべ</b>。さかを まわして、かべで はねかえして ゴールへ！',
-    allow:['wallL','wallS'], new:['wallL','wallS'], need:{wall:1},
-    parts:[ P('ramp',4,4,0,1), P('goal',14,13,0,0,1) ] },
-  { tab:'2', mission:'<ruby>新<rt>あたら</rt></ruby>しい パーツ：<b>玉</b>と<b>ドミノ</b>と<b>ばね</b>。ドミノで 玉を おして、ばねで ゴールへ！',
-    allow:['ball','domino5','domino','spring'], new:['ball','domino5','domino','spring'],
-    parts:[ P('ramp',3,13,0,1,1), P('goal',19.5,5,0,0,1) ] },
-  { tab:'3', mission:'<ruby>新<rt>あたら</rt></ruby>しい パーツ：<b>てっきん</b>と<b>かざぐるま</b>。てっきんを 3こ ならして ゴールへ！',
-    allow:['chime','spinner'], new:['chime','spinner'], need:{chime:3},
-    parts:[ P('ramp',3,13,0,2,1), P('goal',24,13,0,0,1) ] },
-  { tab:'じゆう', free:true, mission:'すきな そうちを つくろう', allow:['ramp','ball','wallL','wallS','domino','domino5','spring','spinner','chime'],
+  { tab:'1', mission:'<ruby>新<rt>あたら</rt></ruby>しい パーツ：<b>さか</b>と<b>かべ</b>。さかの たかさを かえて、かべで <ruby>玉<rt>たま</rt></ruby>の <ruby>向<rt>む</rt></ruby>きを かえよう',
+    allow:['wall'], new:['wall'], newFixed:['ramp'],
+    parts:[ P('ramp',4,13,0,0,'pos'), P('goal',13.5,5,0,0,true) ] },
+  { tab:'2', mission:'<ruby>新<rt>あたら</rt></ruby>しい パーツ：<b>ドミノ</b>と<b>たま</b>。<ruby>赤<rt>あか</rt></ruby>い <ruby>玉<rt>たま</rt></ruby>は とちゅうで とまるよ。ドミノで つないで、<ruby>玉<rt>たま</rt></ruby>を おして ゴールへ',
+    allow:['domino5','domino','ball'], new:['domino5','domino','ball'],
+    parts:[ P('ramp',3,9,0,0,true), P('goal',24,9,0,0,true) ] },
+  { tab:'3', mission:'<ruby>新<rt>あたら</rt></ruby>しい パーツ：<b>ばね</b>と<b>てっきん</b>。てっきんを 2こ ならすと ゴールの さくが ひらくよ。ばねで ゴールへ とばそう',
+    allow:['chime','spring'], new:['chime','spring'],
+    parts:[ P('ramp',3,4,0,0,true), P('goal',20,14,0,2,true) ] },
+  { tab:'じゆう', free:true, mission:'すきな そうちを つくろう', allow:['ramp','ball','wall','domino','domino5','spring','chime'],
     parts:[] }
 ];
 // じゆうモードの最初に置いてある「みほん」
@@ -329,13 +357,17 @@ const MAT={
   bars8:BAR8.map(c=>std({color:c,roughness:0.3,metalness:0.35})), doms:DOM_COL.map(c=>std({color:c,roughness:0.5})),
   ballA:std({map:TEX.ballA,roughness:0.3}), ballB:std({map:TEX.ballB,roughness:0.3}), ballC:std({map:TEX.ballC,roughness:0.3}), metal:std({color:0x555c66,roughness:0.3,metalness:0.6}),
   spring:std({color:0xf08c00,roughness:0.4}), springbase:std({color:0xc76a00,roughness:0.5}), coil:std({map:TEX.coil,metalness:0.4,roughness:0.4}),
-  spinner:std({color:0xae3ec9,roughness:0.5}), arrow:std({color:0xffe066,roughness:0.4}),
+  gate:std({color:0x868e96,roughness:0.4,metalness:0.4}), dash:new THREE.MeshBasicMaterial({color:0x1c7ed6,transparent:true,opacity:0.7}), arrow:std({color:0xffe066,roughness:0.4}),
   guide:new THREE.MeshBasicMaterial({color:0xf2c200,transparent:true,opacity:0.75}),
   board:std({map:TEX.board,roughness:1}), floor:std({map:TEX.floor,roughness:1}), pole:std({color:0x666666}),
   hi:new THREE.MeshBasicMaterial({color:0xffe600,transparent:true,opacity:0.35,depthTest:false}),
   conf:BAR_COL.map(c=>new THREE.MeshBasicMaterial({color:c,side:THREE.DoubleSide}))
 };
 const labelCache={};
+function wideLabel(text,bg,fg){ const key='w'+text+bg; if(!labelCache[key]) labelCache[key]=new THREE.SpriteMaterial({map:canvasTex(320,96,(g,w,h)=>{
+    g.fillStyle=bg; g.beginPath(); g.roundRect(4,4,w-8,h-8,40); g.fill(); g.strokeStyle='#f2c200'; g.lineWidth=6; g.stroke();
+    g.fillStyle=fg; g.font='700 52px "BIZ UDPGothic",sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(text,w/2,h/2+3); }),depthTest:false});
+  const s=new THREE.Sprite(labelCache[key]); s.scale.set(3.3,1.0,1); s.renderOrder=5; return s; }
 function label(text,bg,fg,scale){ const key=text+bg; if(!labelCache[key]) labelCache[key]=new THREE.SpriteMaterial({map:canvasTex(128,128,(g)=>{
     g.fillStyle=bg; g.beginPath(); g.arc(64,64,58,0,7); g.fill(); g.fillStyle=fg; g.font=`700 ${text.length>1?52:78}px "BIZ UDPGothic",sans-serif`; g.textAlign='center'; g.textBaseline='middle'; g.fillText(text,64,70); }),depthTest:false});
   const s=new THREE.Sprite(labelCache[key]); s.scale.setScalar(scale); s.renderOrder=5; return s; }
@@ -352,17 +384,19 @@ const wedgeGeo=h=>{ const k='w'+h; if(geoCache[k]) return geoCache[k]; const L=C
 const arrowGeo=(len,wd)=>{ const k='a'+[len,wd].join(); if(geoCache[k]) return geoCache[k]; const s=new THREE.Shape(), t=wd*0.4, hd=Math.min(len*0.5,wd);
   s.moveTo(0,-t/2); s.lineTo(len-hd,-t/2); s.lineTo(len-hd,-wd/2); s.lineTo(len,0); s.lineTo(len-hd,wd/2); s.lineTo(len-hd,t/2); s.lineTo(0,t/2); s.closePath();
   const g=new THREE.ShapeGeometry(s); g.rotateX(-Math.PI/2); return geoCache[k]=g; };
+const GEO_DASH=new THREE.PlaneGeometry(0.45,0.14); GEO_DASH.rotateX(-Math.PI/2);
+const GEO_STOP=new THREE.RingGeometry(0.28,0.45,24); GEO_STOP.rotateX(-Math.PI/2);
 const GEO_RING=new THREE.TorusGeometry(CFG.GOAL_R,0.13,10,40); GEO_RING.rotateX(Math.PI/2);
 const GEO_DISC=new THREE.CircleGeometry(CFG.GOAL_R,40); GEO_DISC.rotateX(-Math.PI/2);
 
-let group=null, dynMesh=[], springsV=[], flag=null, confetti=[], follow=-1, pickables=[];
+let group=null, dynMesh=[], springsV=[], gateV=[], chimeV=[], counter=null, flag=null, confetti=[], follow=-1, pickables=[];
 function add(geo,mat,x,y,z,parent,sh){ const m=new THREE.Mesh(geo,mat); m.position.set(x,y,z); m.castShadow=sh!==false; m.receiveShadow=true; (parent||group).add(m); return m; }
 // さわって えらべるように、メッシュに部品番号をつける
 function tag(o,pi){ if(pi<0||pi===undefined) return o; o.traverse(c=>c.userData.pi=pi); pickables.push(o); return o; }
 function buildWorld(){
   if(group) scene.remove(group);
-  group=new THREE.Group(); scene.add(group); dynMesh=[]; confetti=[]; springsV=[]; flag=null; pickables=[];
-  sim=createFloorSim(CANNON,layout(),0,BL().need);
+  group=new THREE.Group(); scene.add(group); dynMesh=[]; confetti=[]; springsV=[]; gateV=[]; chimeV=[]; counter=null; flag=null; pickables=[];
+  sim=createFloorSim(CANNON,layout(),0);
   rec=[]; recInfo={win:-1}; acc=0; state.viewT=0; follow=-1;
   const L=layout();
   for(const p of sim.parts){
@@ -370,28 +404,33 @@ function buildWorld(){
     if(p.look==='ground'){ add(boxGeo(p.sx,p.sy,p.sz),MAT.floor,p.body.position.x,p.body.position.y,p.body.position.z,null,false);
       const b=add(planeGeo(BOARD.W,BOARD.H),MAT.board,BOARD.W/2,0.01,BOARD.H/2,null,false); b.rotation.x=-Math.PI/2; continue; }
     const m=add(boxGeo(p.sx,p.sy,p.sz),MAT[p.look]||MAT.wood,0,0,0); m.position.copy(p.body.position); m.quaternion.copy(p.body.quaternion); tag(m,p.pi);
+    if(p.gate){ m.position.y=0.5; gateV.push(m); }   // さくの はしらは、ひらく前の 高さで つくる
   }
   for(const d of sim.dyn){ let m; const k=d.kind, D=CFG.DOMINO;
     if(k==='ball') m=add(GEO_SPH,[MAT.ballA,MAT.ballB,MAT.ballC][d.n%3],0,0,0);
     else if(k==='domino') m=add(boxGeo(D.t,D.h,D.w),MAT.doms[d.i%6],0,0,0);
-    else { m=new THREE.Group(); group.add(m); add(boxGeo(4,0.8,0.3),MAT.spinner,0,0,0,m); add(boxGeo(0.3,0.8,4),MAT.spinner,0,0,0,m); }
     tag(m,d.pi); dynMesh.push(m); }
   for(const d of sim.deco){
     const g=new THREE.Group(); g.position.set(d.x,0,d.z); g.rotation.y=d.a||0; group.add(g);
     if(d.k==='ramp'){ add(wedgeGeo(d.h),MAT.wedge,0,0,0,g);
       add(arrowGeo(2.2,1.0),MAT.guide,CFG.RAMP_L/2+0.4,0.03,0,g,false);            // 玉が出ていく向き
-      if(d.lock){ const s=label('🔒','#ffffff','#333',0.9); s.position.set(-CFG.RAMP_L/2,d.h+2.2,0); g.add(s); } }
+      if(d.lock===true){ const s=label('🔒','#ffffff','#333',0.9); s.position.set(-CFG.RAMP_L/2,d.h+2.2,0); g.add(s); } }
     else if(d.k==='spring'){ add(boxGeo(1.6,0.1,1.6),MAT.springbase,0,0.05,0,g);
       for(let i=0;i<=d.o;i++) add(arrowGeo(0.5,0.9),MAT.arrow,-0.35+i*0.38,0.11,0,g,false);   // やじるしの数＝つよさ
       const c=add(cylGeo(0.22,1,12),MAT.coil,-0.75,0.32,0,g); c.rotation.z=Math.PI/2; const plate=add(boxGeo(0.12,0.55,1.3),MAT.spring,-0.7,0.33,0,g);
       springsV.push({pi:d.pi,coil:c,plate}); }
-    else if(d.k==='hub'){ add(cylGeo(0.35,1.0,14),MAT.metal,0,0.5,0,g);
-      const s=label(L[d.pi].opt?'↺':'↻','#ffffff','#333',0.9); s.position.set(0,1.6,0); g.add(s); }
-    else if(d.k==='chime'){ add(boxGeo(1.8,0.08,0.5),MAT.bars8[d.o],0,0.04,0,g);
+    else if(d.k==='chime'){ chimeV.push({pi:d.pi,m:add(boxGeo(1.8,0.08,0.5),MAT.bars8[d.o],0,0.04,0,g)});
       const s=label(NOTE_NAMES[d.o],'#ffffff','#333',0.8); s.position.set(0,0.75,0); g.add(s); }
-    else if(d.k==='goal'){ add(GEO_DISC,MAT.goalDisc,0,0.02,0,g,false); add(GEO_RING,MAT.goal,0,0.08,0,g); addFlag(d.x,d.z); }
+    else if(d.k==='goal'){ add(GEO_DISC,MAT.goalDisc,0,0.02,0,g,false); add(GEO_RING,MAT.goal,0,0.08,0,g); addFlag(d.x,d.z);
+      // さくつきの ゴールには「♪ 0/2」の かずを 出す（なった かずの ぶんだけ よういして、見せる ものを きりかえる）
+      if(d.need>0){ counter=[]; for(let n=0;n<=d.need;n++){ const s=wideLabel(n>=d.need?'♪ ひらいた！':`♪ ${n} / ${d.need}`, n>=d.need?'#2e9e5b':'#ffffff', n>=d.need?'#fff':'#333'); s.position.set(d.x,2.6,d.z); s.visible=n===0; group.add(s); counter.push(s); } } }
     tag(g,d.pi);
   }
+  // よそく線：坂と ばねから、玉が まっすぐ すすんで とまるまでの 点線（つくっている ときだけ）
+  if(state.mode==='edit') for(const p of L){ const gd=guideOf(p); if(!gd||gd.len<0.5) continue;
+    const ang=Math.atan2(-gd.f.z,gd.f.x);
+    for(let t=0.4;t<gd.len-0.2;t+=0.8){ const m=add(GEO_DASH,MAT.dash,gd.x+gd.f.x*t,0.05,gd.z+gd.f.z*t,null,false); m.rotation.y=ang; }
+    if(gd.stop){ const m=add(GEO_STOP,MAT.dash,gd.x+gd.f.x*gd.len,0.06,gd.z+gd.f.z*gd.len,null,false); } }
   // えらんでいるパーツを黄色く光らせる
   if(state.mode==='edit'&&state.sel>=0&&L[state.sel]){ const h=hitBox(state.sel); const m=add(boxGeo(h.w+0.5,0.05,h.d+0.5),MAT.hi,h.x,0.04,h.z,null,false); m.rotation.y=h.a; m.renderOrder=4; }
   syncBodies(); updateExtras();
@@ -413,6 +452,11 @@ function updateExtras(){
   const kick=u=>u<0?0:u<0.07?u/0.07:Math.max(0,1-(u-0.07)/0.5);
   for(const s of springsV){ let tf=-1; for(const f of sim.fires) if(f.pi===s.pi&&f.t<=T) tf=f.t;
     const e=1.0*kick(tf<0?-1:T-tf); s.plate.position.x=-0.7+e; s.coil.scale.y=0.1+e; s.coil.position.x=-0.8+(0.1+e)/2; }
+  const nRung=sim.rings.filter(r=>r.t<=T).length;
+  if(counter) counter.forEach((s,n)=>s.visible=n===Math.min(nRung,counter.length-1));
+  const go=sim.gateOpenT>=0&&T>=sim.gateOpenT?Math.min(1,(T-sim.gateOpenT)/0.5):0;
+  for(const m of gateV) m.position.y=0.5-1.1*go;   // さくが 床に しずんで ひらく
+  for(const c of chimeV){ let tf=-1; for(const r of sim.rings) if(r.pi===c.pi&&r.t<=T) tf=r.t; const k=tf<0?0:Math.max(0,1-(T-tf)/0.35); c.m.scale.set(1+0.15*k,1+5*k,1+0.3*k); }
   if(flag){ const won=tWin>=0; flag.visible=won; if(won){ const u=Math.min(1,tWin/0.9); flag.position.y=flag.userData.y0+(flag.userData.y1-flag.userData.y0)*(1-(1-u)*(1-u)); }
     for(const m of confetti){ const d=m.userData; m.visible=won&&tWin<4; if(m.visible){ m.position.set(d.x+d.vx*tWin,Math.max(0.05,0.5+d.vy*tWin-6*tWin*tWin),d.z+d.vz*tWin); m.rotation.set(tWin*5+d.r,tWin*7+d.r,0); } } }
 }
@@ -431,6 +475,7 @@ function playEvent(e){
   else if(e.k==='clack') tone(260,0.12,'triangle',0.3,120);
   else if(e.k==='spring'){ tone(140,0.3,'sawtooth',0.18,1100); tone(90,0.15,'square',0.15,50); }
   else if(e.k==='bar'){ const f=NOTES8[e.i]; tone(f,0.9,'sine',0.3); tone(f*2,0.4,'triangle',0.1); }
+  else if(e.k==='gate'){ [784,988,1175].forEach((f,i)=>tone(f,0.25,'triangle',0.2,0,i*0.09)); }
   else if(e.k==='win'){ [523,659,784,1047,784,1047,1319].forEach((f,i)=>tone(f,0.3,'triangle',0.22,0,0.25+i*0.13)); }
   else if(e.k==='fail'){ tone(330,0.25,'triangle',0.2,250,0.2); tone(250,0.45,'triangle',0.2,150,0.45); }
 }
@@ -442,19 +487,18 @@ function setMode(m){ state.mode=m; const go=$('go');
   const tr=$('time'); tr.disabled=m!=='done'; if(m!=='done'){ tr.max=0; tr.value=0; }
   if(m!=='done') $('banner').style.display='none'; }
 function toEdit(){ state.status=''; setMode('edit'); buildWorld(); refreshUI(); }
-function start(){ if(state.mode!=='edit') toEdit(); state.sel=-1; buildWorld(); audioOn(); record(); setMode('run'); refreshUI(); }
+function start(){ if(state.mode!=='edit') toEdit(); state.sel=-1; setMode('run'); buildWorld(); audioOn(); record(); refreshUI(); }   // よそく線は つくっている間だけ（先に run にしてから 作りなおす）
 function finish(){ state.status=sim.status; setMode('done');
   const tr=$('time'); tr.max=rec.length-1; tr.value=rec.length-1;
   const b=$('banner'), bb=$('bannerBtn'); b.style.display='flex'; b.className=sim.status;
   if(sim.status==='win'){ state.cleared[state.level]=true; $('bannerTxt').innerHTML='🎉 だいせいこう！';
     if(BL().free){ bb.innerHTML='つづける'; bb.onclick=toEdit; }
     else { const nx=state.level+1; bb.innerHTML=LEVELS[nx].free?'じゆうに つくる':'つぎの レベルへ'; bb.onclick=()=>setLevel(nx); }
-  } else { const nd=BL().need||{}, got=sim.rung.size;
-    $('bannerTxt').innerHTML= nd.chime&&got<nd.chime ? `ざんねん！ てっきんが ${got}こ しか ならなかったよ（${nd.chime}こ ひつよう）`
-      : nd.wall&&sim.walled.size<nd.wall ? 'ざんねん！ かべに あてて はねかえして みよう'
+  } else { const got=sim.rung.size, need=sim.info.gateNeed;
+    $('bannerTxt').innerHTML= sim.failWhy==='gate' ? `ざんねん！ てっきんが ${got}こ しか ならなかったので、さくが ひらかなかったよ`
       : 'ざんねん！ ゴールに <ruby>入<rt>はい</rt></ruby>らなかったよ'; bb.innerHTML='なおす'; bb.onclick=toEdit; }
   refreshUI(); }
-function setLevel(l){ state.camFree=false; state.level=l; state.sel=-1; state.camFar=true; cam.az=VIEW.AZ; cam.el=VIEW.EL; buildPalette(); toEdit(); resize(); }
+function setLevel(l){ state.camFree=false; state.level=l; state.sel=layouts[l].findIndex(p=>p.lock==='pos'); state.camFar=true; cam.az=VIEW.AZ; cam.el=VIEW.EL; buildPalette(); toEdit(); resize(); }
 function advance(dt){
   state.frames++; state.elapsed+=dt;
   if(state.mode==='run'&&!state.paused){
@@ -499,12 +543,10 @@ window.addEventListener('resize',resize);
 const ICON={
   ramp:'<path d="M6 8 L6 28 L42 28 Z" fill="#e2b377" stroke="#b07a3a" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="7" r="6" fill="#e03131"/>',
   ball:'<circle cx="24" cy="17" r="11" fill="#1c7ed6"/><circle cx="19" cy="17" r="3" fill="#ffe066"/><circle cx="29" cy="17" r="3" fill="#ffe066"/>',
-  wallL:'<line x1="4" y1="12" x2="44" y2="24" stroke="#b07a3a" stroke-width="6" stroke-linecap="round"/>',
-  wallS:'<line x1="13" y1="14" x2="35" y2="21" stroke="#b07a3a" stroke-width="6" stroke-linecap="round"/>',
+  wall:'<line x1="6" y1="28" x2="42" y2="6" stroke="#b07a3a" stroke-width="7" stroke-linecap="round"/><circle cx="10" cy="10" r="5" fill="#e03131"/>',
   domino:'<rect x="21" y="5" width="6" height="25" fill="#f08c00"/>',
   domino5:'<rect x="5" y="5" width="5" height="25" fill="#f08c00"/><rect x="13" y="5" width="5" height="25" fill="#2e9e5b"/><rect x="21" y="5" width="5" height="25" fill="#1c7ed6"/><rect x="29" y="5" width="5" height="25" fill="#ae3ec9"/><rect x="37" y="5" width="5" height="25" fill="#e03131"/>',
   spring:'<rect x="10" y="4" width="28" height="26" rx="3" fill="#c76a00"/><path d="M15 13 h10 v-5 l11 9 l-11 9 v-5 h-10z" fill="#ffe066"/>',
-  spinner:'<line x1="6" y1="17" x2="42" y2="17" stroke="#ae3ec9" stroke-width="6" stroke-linecap="round"/><line x1="24" y1="1" x2="24" y2="33" stroke="#ae3ec9" stroke-width="6" stroke-linecap="round"/><circle cx="24" cy="17" r="4" fill="#555"/>',
   chime:'<rect x="6" y="14" width="26" height="7" rx="3" fill="#1c7ed6"/><text x="35" y="16" font-size="16" fill="#333">♪</text>'
 };
 function buildPalette(){ const el=$('palette'); el.innerHTML='';
@@ -521,7 +563,7 @@ function refreshUI(){
   const sb=$('selbar'), p=state.mode==='edit'&&state.sel>=0?layout()[state.sel]:null;
   sb.style.display=p?'flex':'none';
   if(p){ const sp=PARTS[p.type]; $('selName').textContent=sp.name;
-    $('rotL').style.display=$('rotR').style.display=sp.rot?'':'none';
+    $('rotL').style.display=$('rotR').style.display=sp.rot&&!p.lock?'':'none'; $('delBtn').style.display=p.lock?'none':'';
     $('optBtn').style.display=sp.opt?'':'none'; if(sp.opt) $('optBtn').textContent=sp.opt.label+'：'+sp.opt.names[p.opt||0]; }
   const tp=$('tip'); if(p&&PARTS[p.type].tip){ tp.innerHTML=PARTS[p.type].tip; tp.style.display='block'; } else tp.style.display='none';
 }
@@ -534,7 +576,11 @@ function addPart(type){
   if(L.length>=CFG.MAX_PARTS){ toast('これ <ruby>以上<rt>いじょう</rt></ruby>は おけないよ'); return -1; }
   if(sp.max&&L.filter(p=>p.type===type).length>=sp.max){ toast(`${sp.name}は ${sp.max}こ まで`); return -1; }
   if(sp.dom&&L.reduce((n,p)=>n+(PARTS[p.type].dom||0),0)+sp.dom>CFG.MAX_DOMINO){ toast(`ドミノは ${CFG.MAX_DOMINO}まい まで`); return -1; }
-  let x=BOARD.W/2, z=BOARD.H/2; for(let i=0;i<60&&L.some(p=>Math.abs(p.x-x)<2&&Math.abs(p.z-z)<1.5);i++){ x+=2.5; if(x>BOARD.W-3){ x=4; z+=2; if(z>BOARD.H-2) z=2; } }
+  // ほかの パーツと かさならない、まん中に ちかい 空いた ばしょに 出す
+  const rad=t=>Math.hypot(PARTS[t].w,PARTS[t].d)/2, r0=rad(type); let x=BOARD.W/2, z=BOARD.H/2, best=1e9;
+  for(let gz=1.5;gz<=BOARD.H-1.5;gz+=0.5) for(let gx=2.5;gx<=BOARD.W-2.5;gx+=0.5){
+    if(L.some(p=>Math.hypot(p.x-gx,p.z-gz)<r0+rad(p.type)+0.4)) continue;
+    const d=Math.hypot(gx-BOARD.W/2,(gz-BOARD.H/2)*1.3); if(d<best){ best=d; x=gx; z=gz; } }
   L.push(P(type,x,z,0,sp.opt0||0)); state.sel=L.length-1; changed();
   return state.sel; }
 function movePart(i,x,z){ const p=layout()[i]; if(!p||p.lock) return;
@@ -542,7 +588,7 @@ function movePart(i,x,z){ const p=layout()[i]; if(!p||p.lock) return;
   if(x!==p.x||z!==p.z){ p.x=x; p.z=z; changed(); } }
 function rotatePart(d){ const p=layout()[state.sel]; if(!p||p.lock) return; if(!PARTS[p.type].rot) return;
   p.rot=((p.rot+d+12)%24+24)%24-12; changed(); }
-function cycleOpt(){ const p=layout()[state.sel]; if(!p||p.lock) return; const sp=PARTS[p.type]; if(!sp.opt) return;
+function cycleOpt(){ const p=layout()[state.sel]; if(!p||p.lock===true) return; const sp=PARTS[p.type]; if(!sp.opt) return;
   p.opt=((p.opt||0)+1)%sp.opt.names.length; if(p.type==='chime') playEvent({k:'bar',i:p.opt}); changed(); }
 function deletePart(){ const L=layout(), p=L[state.sel]; if(!p||p.lock) return;
   if(p.type==='goal'){ toast('ゴールは けせないよ'); return; }
@@ -561,7 +607,8 @@ function pick(pt){ const hit=ray.intersectObjects(pickables,true)[0]; if(hit&&hi
 let drag=null;
 canvas.addEventListener('pointerdown',e=>{ try{ canvas.setPointerCapture(e.pointerId); }catch(_){}
   if(state.mode==='edit'){ setRay(e); const pt=floorPoint(), i=pick(pt);
-    if(i>=0){ const p=layout()[i]; if(p.lock){ toast('🔒 これは うごかせないよ'); return; }
+    if(i>=0){ const p=layout()[i]; if(p.lock===true){ toast('🔒 これは うごかせないよ'); return; }
+      if(p.lock==='pos'){ state.sel=i; drag=null; changed(); toast('📌 これは ばしょが きまっているよ。せっていだけ かえられる'); return; }
       state.sel=i; drag=pt?{part:i,ox:p.x-pt.x,oz:p.z-pt.z}:null; changed(); return; }
     if(state.sel>=0){ state.sel=-1; changed(); } }
   if(!state.camFree){ drag=null; return; }   // ふだんは視点を うごかさない（「視点」ボタンで ゆるす）
@@ -604,7 +651,7 @@ window.__game={ state, camera, cam, CFG, PARTS, BOARD, LEVELS, SAMPLE, layouts, 
     addPart, movePart, select(i){ state.sel=i; changed(); }, rotate:rotatePart, cycleOpt, deletePart, resetLayout,
     scrub(n){ $('time').value=n; },
     screenOf(x,z,y){ const v=new THREE.Vector3(x,y||0,z).project(camera); return {x:(v.x+1)/2*window.innerWidth,y:(1-v.y)/2*window.innerHeight}; },
-    simulate(a,need){ const s=createFloorSim(CANNON,a,0,need); while(s.status==='run') s.step(); return {status:s.status,t:s.t}; } } };
+    simulate(a){ const s=createFloorSim(CANNON,a,0); while(s.status==='run') s.step(); return {status:s.status,t:s.t}; } } };
 
 // ---------- 起動 ----------
 function boot(){
