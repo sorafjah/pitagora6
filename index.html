@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>ピタゴラ５ ゆか</title>
+<title>ピタゴラ６</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -44,6 +44,10 @@ button{font-family:inherit;font-weight:700;border:0;border-radius:12px;min-width
 .pbtn:active{background:#d5e9f5}
 #go{width:112px;background:#e8590c;color:#fff;font-size:20px;box-shadow:0 3px 0 #0003;line-height:1.3;flex:none}
 #go.stop{background:#555}
+#tip{position:fixed;left:50%;transform:translateX(-50%);bottom:240px;background:#fff8d6;border:2px solid #f2c200;border-radius:12px;padding:4px 12px;font-size:15px;font-weight:700;line-height:1.8;display:none;max-width:96vw;width:max-content;text-align:center;pointer-events:none}
+.pbtn{position:relative}.pbtn .nw{position:absolute;top:-4px;right:-2px;background:#e03131;color:#fff;font-size:11px;border-radius:8px;padding:0 5px;line-height:16px}
+.pbtn.isnew{outline:3px solid #ffd54a}
+#mission b{background:#ffe9a8;border-radius:6px;padding:0 4px}
 #selbar{position:fixed;left:50%;transform:translateX(-50%);bottom:170px;background:#fff;border-radius:14px;padding:6px 8px;box-shadow:0 3px 0 #0003;display:none;gap:6px;align-items:center;max-width:98vw}
 #selbar span{font-size:15px;font-weight:700;padding:0 4px;white-space:nowrap}
 #selbar button{background:#e8eef2;font-size:16px;padding:0 10px;min-height:48px;min-width:48px;white-space:nowrap}
@@ -73,16 +77,17 @@ button{font-family:inherit;font-weight:700;border:0;border-radius:12px;min-width
 </script>
 </head>
 <body>
-<!-- build: 2026-11-13 yuka-1 -->
+<!-- build: 2026-11-13 pitagora6-2 -->
 <canvas id="c"></canvas>
 <div id="top">
-  <div id="title">ピタゴラ５ ゆか</div>
+  <div id="title">ピタゴラ６</div>
   <button class="lv" data-lv="0"></button><button class="lv" data-lv="1"></button><button class="lv" data-lv="2"></button><button class="lv" data-lv="3"></button>
   <button id="helpBtn" aria-label="あそびかた">？</button>
 </div>
 <div id="mission"></div>
 <div id="banner"><span id="bannerTxt"></span><button id="bannerBtn"></button></div>
 <div id="toast"></div>
+<div id="tip"></div>
 <div id="selbar"><span id="selName"></span><button id="rotL" aria-label="ひだりに まわす">↺</button><button id="rotR" aria-label="みぎに まわす">↻</button><button id="optBtn"></button><button id="delBtn">🗑 けす</button></div>
 <div id="panel">
   <div id="timeRow">
@@ -95,7 +100,7 @@ button{font-family:inherit;font-weight:700;border:0;border-radius:12px;min-width
   <div id="row"><div id="palette"></div><button id="go">▶<br>スタート</button></div>
 </div>
 <div id="help" class="modal open"><div class="box">
-  <h2>ピタゴラ５ ゆか あそび<ruby>方<rt>かた</rt></ruby></h2>
+  <h2>ピタゴラ６ あそび<ruby>方<rt>かた</rt></ruby></h2>
   <svg viewBox="0 0 600 150" aria-hidden="true">
     <path d="M70 18 H530 L590 138 H10 Z" fill="#fbf3df" stroke="#c9a15e" stroke-width="5" stroke-linejoin="round"/>
     <path d="M60 52 L60 92 L130 92 Z" fill="#e2b377" stroke="#b07a3a" stroke-width="3" stroke-linejoin="round"/>
@@ -114,11 +119,12 @@ button{font-family:inherit;font-weight:700;border:0;border-radius:12px;min-width
     <li><span class="ic">👆</span>ゆびで うごかす。↺ ↻ で むきを かえる</li>
     <li><span class="ic">▶</span>「スタート」で <ruby>玉<rt>たま</rt></ruby>が さかを ころがる。ゴールに <ruby>入<rt>はい</rt></ruby>れば せいこう！</li>
     <li><span class="ic">⏪</span><ruby>止<rt>と</rt></ruby>まったら「<ruby>時間<rt>じかん</rt></ruby>」の バーで まきもどして、たしかめよう</li>
+    <li><span class="ic">🆕</span>レベル1〜3は、あたらしい パーツを ひとつずつ おぼえる れんしゅう。<span style="background:#e03131;color:#fff;border-radius:8px;padding:0 6px;font-size:13px">NEW</span>の パーツを つかってみよう</li>
     <li><span class="ic">🔄</span>なにも ない ところを ゆびで なぞると、<ruby>見<rt>み</rt></ruby>る むきが かわる</li>
   </ol>
   <button id="startBtn">はじめる</button>
 </div></div>
-<div id="ver">v2026-11-13 ゆか1</div>
+<div id="ver">v2026-11-13 ピタゴラ６-2</div>
 
 <script type="module">
 import * as THREE from 'three';
@@ -147,16 +153,16 @@ const BOARD = { W: 28, H: 18 };
 const NOTE_NAMES = ['ド','レ','ミ','ファ','ソ','ラ','シ','ド'];
 // w＝向いている方向の長さ、d＝横幅（えらぶときの当たり判定） rot＝15°きざみで回せる（24で1周）
 const PARTS = {
-  ramp:   { name:'さか', w:4.2, d:1.6, rot:24, max:3, opt:{ label:'たかさ', names:['ひくい','ふつう','たかい'] }, opt0:1 },
-  ball:   { name:'たま', w:1, d:1, max:3 },
-  wallL:  { name:'ながい かべ', w:6, d:0.3, rot:24 },
-  wallS:  { name:'みじかい かべ', w:3, d:0.3, rot:24 },
-  domino: { name:'ドミノ', w:0.24, d:1.0, rot:24, dom:1 },
-  domino5:{ name:'ドミノ 5まい', w:4.24, d:1.0, rot:24, dom:5 },
-  spring: { name:'ばね', w:1.6, d:1.6, rot:24, opt:{ label:'つよさ', names:['よわい','ふつう','つよい'] }, opt0:1 },
-  spinner:{ name:'かざぐるま', w:4, d:4, opt:{ label:'むき', names:['みぎまわり','ひだりまわり'] } },
-  chime:  { name:'てっきん', w:1.8, d:0.5, rot:24, opt:{ label:'おと', names:NOTE_NAMES } },
-  goal:   { name:'ゴール', w:2.6, d:2.6, max:1 }
+  ramp:   { tip:'さかの たかさを かえると、<ruby>玉<rt>たま</rt></ruby>の いきおいが かわるよ。↺ ↻ で やじるしの <ruby>向<rt>む</rt></ruby>きを かえよう', name:'さか', w:4.2, d:1.6, rot:24, max:3, opt:{ label:'たかさ', names:['ひくい','ふつう','たかい'] }, opt0:1 },
+  ball:   { tip:'うごかない <ruby>玉<rt>たま</rt></ruby>。ドミノや <ruby>玉<rt>たま</rt></ruby>が ぶつかると ころがるよ', name:'たま', w:1, d:1, max:3 },
+  wallL:  { tip:'かべに あたった <ruby>玉<rt>たま</rt></ruby>は はねかえるよ。<ruby>角度<rt>かくど</rt></ruby>を ↺ ↻ で かえて ねらおう', name:'ながい かべ', w:6, d:0.3, rot:24 },
+  wallS:  { tip:'かべに あたった <ruby>玉<rt>たま</rt></ruby>は はねかえるよ。<ruby>角度<rt>かくど</rt></ruby>を ↺ ↻ で かえて ねらおう', name:'みじかい かべ', w:3, d:0.3, rot:24 },
+  domino: { tip:'ドミノを ならべて、じゅんばんに たおそう。<ruby>玉<rt>たま</rt></ruby>に あたると おし<ruby>出<rt>だ</rt></ruby>すよ', name:'ドミノ', w:0.24, d:1.0, rot:24, dom:1 },
+  domino5:{ tip:'ドミノが 5まい ならんだ セット。↺ ↻ で <ruby>向<rt>む</rt></ruby>きを あわせよう', name:'ドミノ 5まい', w:4.24, d:1.0, rot:24, dom:5 },
+  spring: { tip:'のった <ruby>玉<rt>たま</rt></ruby>を やじるしの <ruby>向<rt>む</rt></ruby>きに とばすよ。やじるしの かずが つよさ', name:'ばね', w:1.6, d:1.6, rot:24, opt:{ label:'つよさ', names:['よわい','ふつう','つよい'] }, opt0:1 },
+  spinner:{ tip:'くるくる まわる しかけ。さわった <ruby>玉<rt>たま</rt></ruby>は はじかれるよ（おまけ）', name:'かざぐるま', w:4, d:4, opt:{ label:'むき', names:['みぎまわり','ひだりまわり'] } },
+  chime:  { tip:'うえを <ruby>玉<rt>たま</rt></ruby>が とおると おとが なるよ。ボタンで おとを かえられる', name:'てっきん', w:1.8, d:0.5, rot:24, opt:{ label:'おと', names:NOTE_NAMES } },
+  goal:   { tip:'ここに <ruby>玉<rt>たま</rt></ruby>が <ruby>入<rt>はい</rt></ruby>れば せいこう！', name:'ゴール', w:2.6, d:2.6, max:1 }
 };
 const ANG = k => (k||0)*Math.PI/12;
 // 向き a のときの「前」は (cos a, 0, -sin a)。a=0 で右、a=90°で おく（画面の上）
@@ -164,8 +170,8 @@ const fwd = a => ({ x:Math.cos(a), z:-Math.sin(a) });
 
 // 物理シミュレーション本体（Node.js でも同じコードで検証できるよう、描画と分けています）
 // 床バージョンは完全な3Dの物理です（壁バージョンのような z 固定はしていません）
-function createFloorSim(C, layout, eps){
-  eps=eps||0; const R=CFG.BALL_R, H=CFG.H;
+function createFloorSim(C, layout, eps, need){
+  eps=eps||0; need=need||{}; const R=CFG.BALL_R, H=CFG.H;
   const world=new C.World(); world.gravity.set(0,-CFG.G*(1+eps),0); world.solver.iterations=20; world.allowSleep=false;
   const M={}; ['ball','st','wall','dom','bar'].forEach(k=>M[k]=new C.Material(k));
   const cm=(a,b,f,r)=>world.addContactMaterial(new C.ContactMaterial(M[a],M[b],{friction:f,restitution:r}));
@@ -184,7 +190,8 @@ function createFloorSim(C, layout, eps){
   box(BOARD.W/2,FH/2,-FT/2,BOARD.W+FT*2,FH,FT,null,{look:'frame',mat:'wall'}); box(BOARD.W/2,FH/2,BOARD.H+FT/2,BOARD.W+FT*2,FH,FT,null,{look:'frame',mat:'wall'});
   box(-FT/2,FH/2,BOARD.H/2,FT,FH,BOARD.H,null,{look:'frame',mat:'wall'}); box(BOARD.W+FT/2,FH/2,BOARD.H/2,FT,FH,BOARD.H,null,{look:'frame',mat:'wall'});
   const balls=[], spinners=[], springs=[], ramps=[], chimes=[]; let goal=null, slowMovers=false, nDom=0;
-  const s={ world, parts, dyn, events, deco, fires, t:0, steps:0, status:'run', info:{} };
+  const s={ world, parts, dyn, events, deco, fires, t:0, steps:0, status:'run', failWhy:'', info:{} };
+  const rung=new Set(), spun=new Set(), walled=new Set();   // 鳴らしたてっきん／さわったかざぐるま（お題の条件に使う）
   function addBall(x,y,z,pi){ const b=new C.Body({mass:1,material:M.ball}); b.addShape(new C.Sphere(R)); b.position.set(x,y,z); b.linearDamping=0.02; b.angularDamping=0.02;
     b.addEventListener('collide',e=>{ const v=Math.abs(e.contact.getImpactVelocityAlongNormal());
       if(e.body.material===M.ball&&v>0.8) events.push({k:'clack'}); else if(e.body.material===M.wall&&v>1.5) events.push({k:'knock'}); });
@@ -205,17 +212,19 @@ function createFloorSim(C, layout, eps){
       const xc=-L/2+0.55, ys=h*(L/2-xc)/L; const bp=W(xc+R*sn,ys+R*cs+0.003,0); addBall(bp[0]+eps*0.3*f.x,bp[1],bp[2]+eps*0.3*f.z,pi);
       ramps.push({ball:balls[balls.length-1],x,z,f,v:CFG.RAMP_V[o],done:false});
       deco.push({k:'ramp',x,z,a,h,pi,lock:p.lock}); }
-    else if(p.type==='wallL'||p.type==='wallS') box(x,CFG.WALL_H/2,z,PARTS[p.type].w,CFG.WALL_H,0.3,qy(a),{look:wood,mat:'wall',pi});
+    else if(p.type==='wallL'||p.type==='wallS'){ const wb=box(x,CFG.WALL_H/2,z,PARTS[p.type].w,CFG.WALL_H,0.3,qy(a),{look:wood,mat:'wall',pi});
+      wb.addEventListener('collide',e=>{ if(balls.includes(e.body)) walled.add(pi); }); }
     else if(p.type==='domino') addDomino(x,z,a,pi);
     else if(p.type==='domino5'){ for(let i=0;i<5;i++){ const w=W((i-2)*CFG.DOMINO.step,0,0); addDomino(w[0],w[2],a,pi); } }
     else if(p.type==='spring'){ springs.push({pi,x,z,f,v:CFG.SPRING_V[o],last:-1}); deco.push({k:'spring',x,z,a,o,pi}); }   // ばねは床の台。玉が乗ると矢印の向きに打ち出す
     else if(p.type==='spinner'){ const b=new C.Body({mass:0,type:C.Body.KINEMATIC,material:M.wall}); b.addShape(new C.Box(new C.Vec3(2,0.4,0.15)));
       b.addShape(new C.Box(new C.Vec3(2,0.4,0.15)),new C.Vec3(0,0,0),qy(Math.PI/2)); b.position.set(x,0.5,z);
+      b.addEventListener('collide',e=>{ if(balls.includes(e.body)) spun.add(pi); });
       world.addBody(b); dyn.push({body:b,kind:'spinner',pi}); spinners.push({b,w:o?CFG.SPIN_W:-CFG.SPIN_W}); deco.push({k:'hub',x,z,pi}); slowMovers=true; }
-    else if(p.type==='chime'){ chimes.push({x,z,f,o,last:-1}); deco.push({k:'chime',x,z,a,o,pi}); }   // てっきんは床にはった板。玉が上を通ると鳴る（当たり判定はなし）
+    else if(p.type==='chime'){ chimes.push({pi,x,z,f,o,last:-1}); deco.push({k:'chime',x,z,a,o,pi}); }   // てっきんは床にはった板。玉が上を通ると鳴る（当たり判定はなし）
     else if(p.type==='goal'){ goal={x,z}; deco.push({k:'goal',x,z,pi,lock:p.lock}); }
   });
-  s.info={goal, balls:balls.length};
+  s.info={goal, balls:balls.length}; s.rung=rung; s.spun=spun; s.walled=walled;
   const movers=dyn.filter(d=>d.kind==='ball'||d.kind==='domino');
   let winT=0, stallT=0; const stallLim=slowMovers?3:1.5;
   s.step=function(){
@@ -233,26 +242,32 @@ function createFloorSim(C, layout, eps){
         if(v.x*r.f.x+v.z*r.f.z>1){ v.set(r.f.x*r.v,0,r.f.z*r.v); r.ball.angularVelocity.set(r.f.z*r.v/R,0,-r.f.x*r.v/R); } } }
     let inGoal=false;
     for(const b of balls){ const p=b.position, v=b.velocity;
-      if(p.y<R+0.3) for(const c of chimes){ const dx=p.x-c.x, dz=p.z-c.z; if(Math.abs(dx*c.f.x+dz*c.f.z)<0.9&&Math.abs(dx*c.f.z-dz*c.f.x)<0.4&&s.t-c.last>0.4){ c.last=s.t; events.push({k:'bar',i:c.o}); } }
+      if(p.y<R+0.3) for(const c of chimes){ const dx=p.x-c.x, dz=p.z-c.z; if(Math.abs(dx*c.f.x+dz*c.f.z)<0.9&&Math.abs(dx*c.f.z-dz*c.f.x)<0.4&&s.t-c.last>0.4){ c.last=s.t; rung.add(c.pi); events.push({k:'bar',i:c.o}); } }
       if(p.y<R+0.08){ const sp=Math.hypot(v.x,v.z); if(sp>1e-6){ const k=Math.max(0,sp-CFG.ROLL_DECEL*H)/sp; v.x*=k; v.z*=k; b.angularVelocity.scale(k,b.angularVelocity); } }   // 床の ころがり抵抗
       if(goal&&p.y<R+0.5){ const dx=goal.x-p.x, dz=goal.z-p.z;
         if(Math.hypot(dx,dz)<CFG.GOAL_R){ inGoal=true; v.x=v.x*0.9+dx*0.3; v.z=v.z*0.9+dz*0.3; b.angularVelocity.scale(0.9,b.angularVelocity); } } }   // ゴールは玉を吸いよせる（チート）
-    winT=inGoal?winT+H:0; if(winT>0.4){ s.status='win'; events.push({k:'win'}); return; }
+    winT=inGoal?winT+H:0;
+    const okNeed=rung.size>=(need.chime||0)&&spun.size>=(need.spinner||0)&&walled.size>=(need.wall||0);
+    if(winT>0.4&&okNeed){ s.status='win'; events.push({k:'win'}); return; }
     let mx=0; for(const d of movers){ if(d.body.position.y<-3) continue; const v=d.body.velocity.length()+d.body.angularVelocity.length()*0.3; if(v>mx) mx=v; }
     stallT=(mx<0.25&&s.t>1)?stallT+H:0;
-    if(stallT>stallLim||s.t>CFG.TIME_LIMIT){ s.status='fail'; events.push({k:'fail'}); }
+    if(stallT>stallLim||s.t>CFG.TIME_LIMIT){ s.status='fail'; s.failWhy=winT>0.4||inGoal?'need':'goal'; events.push({k:'fail'}); }
   };
   return s;
 }
 // お題（lock＝動かせない部品） allow＝使えるパーツ
 const P=(type,x,z,rot,opt,lock)=>({type,x,z,rot:rot||0,opt:opt||0,lock:!!lock});
+// レベル1〜3は「パーツのチュートリアル」： new＝このレベルで はじめて出てくるパーツ（NEWの印がつく） need＝ゴールのほかに必要な条件
 const LEVELS = [
-  { tab:'1', mission:'さかを うごかしたり まわしたり して、<ruby>玉<rt>たま</rt></ruby>を ゴールに <ruby>入<rt>い</rt></ruby>れよう', allow:['wallL','wallS'],
-    parts:[ P('ramp',6,12,0,1), P('goal',16.5,6,0,0,1) ] },
-  { tab:'2', mission:'かべで <ruby>玉<rt>たま</rt></ruby>を はねかえして、ゴールに <ruby>入<rt>い</rt></ruby>れよう', allow:['wallL','wallS'],
-    parts:[ P('ramp',4,4,0,2,1), P('goal',14,13,0,0,1) ] },
-  { tab:'3', mission:'ばねで <ruby>玉<rt>たま</rt></ruby>を とばして、とおくの ゴールに とどけよう', allow:['spring','wallL','wallS','domino','domino5','ball'],
-    parts:[ P('ramp',3,10,0,0,1), P('goal',24,5,0,0,1) ] },
+  { tab:'1', mission:'<ruby>新<rt>あたら</rt></ruby>しい パーツ：<b>さか</b>と<b>かべ</b>。さかを まわして、かべで はねかえして ゴールへ！',
+    allow:['wallL','wallS'], new:['wallL','wallS'], need:{wall:1},
+    parts:[ P('ramp',4,4,0,1), P('goal',14,13,0,0,1) ] },
+  { tab:'2', mission:'<ruby>新<rt>あたら</rt></ruby>しい パーツ：<b>玉</b>と<b>ドミノ</b>と<b>ばね</b>。ドミノで 玉を おして、ばねで ゴールへ！',
+    allow:['ball','domino5','domino','spring'], new:['ball','domino5','domino','spring'],
+    parts:[ P('ramp',3,13,0,1,1), P('goal',19.5,5,0,0,1) ] },
+  { tab:'3', mission:'<ruby>新<rt>あたら</rt></ruby>しい パーツ：<b>てっきん</b>と<b>かざぐるま</b>。てっきんを 3こ ならして ゴールへ！',
+    allow:['chime','spinner'], new:['chime','spinner'], need:{chime:3},
+    parts:[ P('ramp',3,13,0,2,1), P('goal',24,13,0,0,1) ] },
   { tab:'じゆう', free:true, mission:'すきな そうちを つくろう', allow:['ramp','ball','wallL','wallS','domino','domino5','spring','spinner','chime'],
     parts:[] }
 ];
@@ -346,7 +361,7 @@ function tag(o,pi){ if(pi<0||pi===undefined) return o; o.traverse(c=>c.userData.
 function buildWorld(){
   if(group) scene.remove(group);
   group=new THREE.Group(); scene.add(group); dynMesh=[]; confetti=[]; springsV=[]; flag=null; pickables=[];
-  sim=createFloorSim(CANNON,layout(),0);
+  sim=createFloorSim(CANNON,layout(),0,BL().need);
   rec=[]; recInfo={win:-1}; acc=0; state.viewT=0; follow=-1;
   const L=layout();
   for(const p of sim.parts){
@@ -433,7 +448,10 @@ function finish(){ state.status=sim.status; setMode('done');
   if(sim.status==='win'){ state.cleared[state.level]=true; $('bannerTxt').innerHTML='🎉 だいせいこう！';
     if(BL().free){ bb.innerHTML='つづける'; bb.onclick=toEdit; }
     else { const nx=state.level+1; bb.innerHTML=LEVELS[nx].free?'じゆうに つくる':'つぎの レベルへ'; bb.onclick=()=>setLevel(nx); }
-  } else { $('bannerTxt').innerHTML='ざんねん！ ゴールに <ruby>入<rt>はい</rt></ruby>らなかったよ'; bb.innerHTML='なおす'; bb.onclick=toEdit; }
+  } else { const nd=BL().need||{}, got=sim.rung.size;
+    $('bannerTxt').innerHTML= nd.chime&&got<nd.chime ? `ざんねん！ てっきんが ${got}こ しか ならなかったよ（${nd.chime}こ ひつよう）`
+      : nd.wall&&sim.walled.size<nd.wall ? 'ざんねん！ かべに あてて はねかえして みよう'
+      : 'ざんねん！ ゴールに <ruby>入<rt>はい</rt></ruby>らなかったよ'; bb.innerHTML='なおす'; bb.onclick=toEdit; }
   refreshUI(); }
 function setLevel(l){ state.level=l; state.sel=-1; state.camFar=true; cam.az=VIEW.AZ; cam.el=VIEW.EL; buildPalette(); toEdit(); resize(); }
 function advance(dt){
@@ -473,7 +491,7 @@ function resize(){ const w=window.innerWidth,h=window.innerHeight; renderer.setS
   const ms=$('mission'), bn=$('banner'); freeTop=(ms.style.display==='none'?bn:ms).getBoundingClientRect().bottom+4; if(!(freeTop>20)) freeTop=100; freeBot=$('panel').offsetHeight;
   // 見たい所が、上のバーと下のパネルの間のまん中に来るように、画面全体をずらす
   camera.setViewOffset(w,h,0,(freeBot-freeTop)/2,w,h); camera.updateProjectionMatrix();
-  $('selbar').style.bottom=(freeBot+8)+'px'; }
+  $('selbar').style.bottom=(freeBot+8)+'px'; $('tip').style.bottom=(freeBot+8+64)+'px'; }
 window.addEventListener('resize',resize);
 
 // ---------- UI ----------
@@ -490,7 +508,8 @@ const ICON={
 };
 function buildPalette(){ const el=$('palette'); el.innerHTML='';
   BL().allow.forEach(t=>{ const b=document.createElement('button'); b.className='pbtn'; b.dataset.t=t;
-    b.innerHTML=`<svg viewBox="0 0 48 34">${ICON[t]}</svg>${PARTS[t].name}`; b.addEventListener('click',()=>{ audioOn(); addPart(t); }); el.appendChild(b); }); }
+    const nw=(BL().new||[]).includes(t); b.classList.toggle('isnew',nw);
+    b.innerHTML=`<svg viewBox="0 0 48 34">${ICON[t]}</svg>${PARTS[t].name}${nw?'<span class="nw">NEW</span>':''}`; b.addEventListener('click',()=>{ audioOn(); addPart(t); }); el.appendChild(b); }); }
 let toastT=0;
 function toast(msg){ const t=$('toast'); t.innerHTML=msg; t.style.display='block'; clearTimeout(toastT); toastT=setTimeout(()=>t.style.display='none',1600); }
 function refreshUI(){
@@ -503,6 +522,7 @@ function refreshUI(){
   if(p){ const sp=PARTS[p.type]; $('selName').textContent=sp.name;
     $('rotL').style.display=$('rotR').style.display=sp.rot?'':'none';
     $('optBtn').style.display=sp.opt?'':'none'; if(sp.opt) $('optBtn').textContent=sp.opt.label+'：'+sp.opt.names[p.opt||0]; }
+  const tp=$('tip'); if(p&&PARTS[p.type].tip){ tp.innerHTML=PARTS[p.type].tip; tp.style.display='block'; } else tp.style.display='none';
 }
 // ---------- パーツの編集 ----------
 const snap=v=>Math.round(v/CFG.GRID)*CFG.GRID;
@@ -515,7 +535,6 @@ function addPart(type){
   if(sp.dom&&L.reduce((n,p)=>n+(PARTS[p.type].dom||0),0)+sp.dom>CFG.MAX_DOMINO){ toast(`ドミノは ${CFG.MAX_DOMINO}まい まで`); return -1; }
   let x=BOARD.W/2, z=BOARD.H/2; for(let i=0;i<60&&L.some(p=>Math.abs(p.x-x)<2&&Math.abs(p.z-z)<1.5);i++){ x+=2.5; if(x>BOARD.W-3){ x=4; z+=2; if(z>BOARD.H-2) z=2; } }
   L.push(P(type,x,z,0,sp.opt0||0)); state.sel=L.length-1; changed();
-  if(type==='spring'||type==='ramp') toast('↺ ↻ で、やじるしの <ruby>向<rt>む</rt></ruby>きを かえられるよ');
   return state.sel; }
 function movePart(i,x,z){ const p=layout()[i]; if(!p||p.lock) return;
   x=Math.max(0.5,Math.min(BOARD.W-0.5,snap(x))); z=Math.max(0.5,Math.min(BOARD.H-0.5,snap(z)));
@@ -582,19 +601,19 @@ window.__game={ state, camera, cam, CFG, PARTS, BOARD, LEVELS, SAMPLE, layouts, 
     addPart, movePart, select(i){ state.sel=i; changed(); }, rotate:rotatePart, cycleOpt, deletePart, resetLayout,
     scrub(n){ $('time').value=n; },
     screenOf(x,z,y){ const v=new THREE.Vector3(x,y||0,z).project(camera); return {x:(v.x+1)/2*window.innerWidth,y:(1-v.y)/2*window.innerHeight}; },
-    simulate(a){ const s=createFloorSim(CANNON,a,0); while(s.status==='run') s.step(); return {status:s.status,t:s.t}; } } };
+    simulate(a,need){ const s=createFloorSim(CANNON,a,0,need); while(s.status==='run') s.step(); return {status:s.status,t:s.t}; } } };
 
 // ---------- 起動 ----------
 function boot(){
   TEX.flag=canvasTex(512,212,(g,w,h)=>{ g.fillStyle='#ffd54a'; g.fillRect(0,0,w,h); g.strokeStyle='#e8590c'; g.lineWidth=14; g.strokeRect(7,7,w-14,h-14);
-    g.fillStyle='#333'; g.font='700 96px "BIZ UDPGothic",sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText('ピタゴラ５',w/2,h/2+6); });
+    g.fillStyle='#333'; g.font='700 96px "BIZ UDPGothic",sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText('ピタゴラ６',w/2,h/2+6); });
   MAT.flag=new THREE.MeshBasicMaterial({map:TEX.flag,side:THREE.DoubleSide});
   setLevel(0); cam.dist=fitDist();
   let last=performance.now();
   renderer.setAnimationLoop(now=>{ const dt=Math.min((now-last)/1000,1/30); last=now; advance(dt); renderer.render(scene,camera); });
 }
 let booted=false; const once=()=>{ if(!booted){ booted=true; boot(); } };
-(document.fonts&&document.fonts.load?document.fonts.load('700 40px "BIZ UDPGothic"','ピタゴラ５１２３'):Promise.resolve()).then(once,once); setTimeout(once,1500);
+(document.fonts&&document.fonts.load?document.fonts.load('700 40px "BIZ UDPGothic"','ピタゴラ６１２３'):Promise.resolve()).then(once,once); setTimeout(once,1500);
 
 </script>
 </body>
