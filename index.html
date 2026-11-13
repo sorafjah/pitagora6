@@ -77,7 +77,7 @@ button{font-family:inherit;font-weight:700;border:0;border-radius:12px;min-width
 </script>
 </head>
 <body>
-<!-- build: 2026-11-13 pitagora6-2 -->
+<!-- build: 2026-11-13 pitagora6-3 -->
 <canvas id="c"></canvas>
 <div id="top">
   <div id="title">ピタゴラ６</div>
@@ -95,6 +95,7 @@ button{font-family:inherit;font-weight:700;border:0;border-radius:12px;min-width
     <span id="timeLbl">⏪ <ruby>時間<rt>じかん</rt></ruby></span>
     <input id="time" type="range" min="0" max="0" value="0" step="1" disabled>
     <button id="clearBtn"></button>
+    <button id="viewBtn">🔄 <ruby>視点<rt>してん</rt></ruby></button>
     <button id="camBtn">🔍 おいかける</button>
   </div>
   <div id="row"><div id="palette"></div><button id="go">▶<br>スタート</button></div>
@@ -120,11 +121,11 @@ button{font-family:inherit;font-weight:700;border:0;border-radius:12px;min-width
     <li><span class="ic">▶</span>「スタート」で <ruby>玉<rt>たま</rt></ruby>が さかを ころがる。ゴールに <ruby>入<rt>はい</rt></ruby>れば せいこう！</li>
     <li><span class="ic">⏪</span><ruby>止<rt>と</rt></ruby>まったら「<ruby>時間<rt>じかん</rt></ruby>」の バーで まきもどして、たしかめよう</li>
     <li><span class="ic">🆕</span>レベル1〜3は、あたらしい パーツを ひとつずつ おぼえる れんしゅう。<span style="background:#e03131;color:#fff;border-radius:8px;padding:0 6px;font-size:13px">NEW</span>の パーツを つかってみよう</li>
-    <li><span class="ic">🔄</span>なにも ない ところを ゆびで なぞると、<ruby>見<rt>み</rt></ruby>る むきが かわる</li>
+    <li><span class="ic">🔄</span>「<ruby>視点<rt>してん</rt></ruby>」ボタンを おすと、なにも ない ところを ゆびで なぞって <ruby>見<rt>み</rt></ruby>る むきを かえられる（もう1<ruby>回<rt>かい</rt></ruby>おすと もどる）</li>
   </ol>
   <button id="startBtn">はじめる</button>
 </div></div>
-<div id="ver">v2026-11-13 ピタゴラ６-2</div>
+<div id="ver">v2026-11-13 ピタゴラ６-3</div>
 
 <script type="module">
 import * as THREE from 'three';
@@ -282,7 +283,7 @@ const VIEW = { AZ: 0, EL: 0.95, EL_MIN: 0.45, EL_MAX: 1.45, AZ_MAX: 0.9, NEAR_DI
 const $ = id => document.getElementById(id);
 const clone = a => a.map(p=>Object.assign({},p));
 
-const state = { mode:'edit', level:0, sel:-1, paused:true, slow:false, camFar:true,
+const state = { mode:'edit', level:0, sel:-1, paused:true, slow:false, camFar:true, camFree:false,
   frames:0, elapsed:0, status:'', viewT:0, cleared:[false,false,false,false] };
 const layouts = LEVELS.map(l=>clone(l.free?SAMPLE:l.parts));
 const BL = () => LEVELS[state.level];
@@ -453,7 +454,7 @@ function finish(){ state.status=sim.status; setMode('done');
       : nd.wall&&sim.walled.size<nd.wall ? 'ざんねん！ かべに あてて はねかえして みよう'
       : 'ざんねん！ ゴールに <ruby>入<rt>はい</rt></ruby>らなかったよ'; bb.innerHTML='なおす'; bb.onclick=toEdit; }
   refreshUI(); }
-function setLevel(l){ state.level=l; state.sel=-1; state.camFar=true; cam.az=VIEW.AZ; cam.el=VIEW.EL; buildPalette(); toEdit(); resize(); }
+function setLevel(l){ state.camFree=false; state.level=l; state.sel=-1; state.camFar=true; cam.az=VIEW.AZ; cam.el=VIEW.EL; buildPalette(); toEdit(); resize(); }
 function advance(dt){
   state.frames++; state.elapsed+=dt;
   if(state.mode==='run'&&!state.paused){
@@ -514,7 +515,7 @@ let toastT=0;
 function toast(msg){ const t=$('toast'); t.innerHTML=msg; t.style.display='block'; clearTimeout(toastT); toastT=setTimeout(()=>t.style.display='none',1600); }
 function refreshUI(){
   document.querySelectorAll('.lv').forEach(b=>{ const l=+b.dataset.lv; b.classList.toggle('on',l===state.level); b.textContent=(state.cleared[l]?'⭐':'')+(LEVELS[l].free?'じゆう':'レベル'+LEVELS[l].tab); });
-  $('slowBtn').classList.toggle('on',state.slow); $('camBtn').classList.toggle('on',!state.camFar);
+  $('slowBtn').classList.toggle('on',state.slow); $('viewBtn').classList.toggle('on',state.camFree); $('camBtn').classList.toggle('on',!state.camFar);
   $('mission').innerHTML=BL().mission; $('mission').style.display=state.mode==='done'?'none':'block';
   const cb=$('clearBtn'); if(!cb.classList.contains('warn')) cb.textContent=BL().free?'🧹 ぜんぶ けす':'↩ さいしょから';
   const sb=$('selbar'), p=state.mode==='edit'&&state.sel>=0?layout()[state.sel]:null;
@@ -563,6 +564,7 @@ canvas.addEventListener('pointerdown',e=>{ try{ canvas.setPointerCapture(e.point
     if(i>=0){ const p=layout()[i]; if(p.lock){ toast('🔒 これは うごかせないよ'); return; }
       state.sel=i; drag=pt?{part:i,ox:p.x-pt.x,oz:p.z-pt.z}:null; changed(); return; }
     if(state.sel>=0){ state.sel=-1; changed(); } }
+  if(!state.camFree){ drag=null; return; }   // ふだんは視点を うごかさない（「視点」ボタンで ゆるす）
   drag={x:e.clientX,y:e.clientY,az:cam.az,el:cam.el}; });
 canvas.addEventListener('pointermove',e=>{ if(!drag) return;
   if(drag.part!==undefined){ setRay(e); const pt=floorPoint(); if(pt) movePart(drag.part,pt.x+drag.ox,pt.z+drag.oz); return; }
@@ -571,6 +573,7 @@ canvas.addEventListener('pointermove',e=>{ if(!drag) return;
 
 $('go').addEventListener('click',()=>{ audioOn(); if(state.mode==='edit') start(); else toEdit(); });
 $('slowBtn').addEventListener('click',()=>{ state.slow=!state.slow; refreshUI(); });
+$('viewBtn').addEventListener('click',()=>{ state.camFree=!state.camFree; if(state.camFree) toast('ゆびで なぞって、<ruby>見<rt>み</rt></ruby>る むきを かえよう'); else { cam.az=VIEW.AZ; cam.el=VIEW.EL; } refreshUI(); });
 $('camBtn').addEventListener('click',()=>{ state.camFar=!state.camFar; cam.az=VIEW.AZ; cam.el=VIEW.EL; refreshUI(); });
 $('rotL').addEventListener('click',()=>rotatePart(1)); $('rotR').addEventListener('click',()=>rotatePart(-1));
 $('optBtn').addEventListener('click',()=>{ audioOn(); cycleOpt(); }); $('delBtn').addEventListener('click',deletePart);
