@@ -77,7 +77,7 @@ button{font-family:inherit;font-weight:700;border:0;border-radius:12px;min-width
 </script>
 </head>
 <body>
-<!-- build: 2026-11-13 pitagora6-4 -->
+<!-- build: 2026-11-13 pitagora6-5 -->
 <canvas id="c"></canvas>
 <div id="top">
   <div id="title">ピタゴラ６</div>
@@ -120,13 +120,12 @@ button{font-family:inherit;font-weight:700;border:0;border-radius:12px;min-width
     <li><span class="ic">👆</span>ゆびで うごかす。↺ ↻ で むきを かえる</li>
     <li><span class="ic">▶</span>「スタート」で <ruby>玉<rt>たま</rt></ruby>が さかを ころがる。ゴールに <ruby>入<rt>はい</rt></ruby>れば せいこう！</li>
     <li><span class="ic">⏪</span><ruby>止<rt>と</rt></ruby>まったら「<ruby>時間<rt>じかん</rt></ruby>」の バーで まきもどして、たしかめよう</li>
-    <li><span class="ic">┅</span><ruby>青<rt>あお</rt></ruby>い <ruby>点線<rt>てんせん</rt></ruby>は <ruby>玉<rt>たま</rt></ruby>の すすむ みち。◎で とまるよ</li>
     <li><span class="ic">🆕</span>レベル1〜3は、あたらしい パーツを ひとつずつ おぼえる れんしゅう。<span style="background:#e03131;color:#fff;border-radius:8px;padding:0 6px;font-size:13px">NEW</span>の パーツを つかってみよう</li>
     <li><span class="ic">🔄</span>「<ruby>視点<rt>してん</rt></ruby>」ボタンを おすと、なにも ない ところを ゆびで なぞって <ruby>見<rt>み</rt></ruby>る むきを かえられる（もう1<ruby>回<rt>かい</rt></ruby>おすと もどる）</li>
   </ol>
   <button id="startBtn">はじめる</button>
 </div></div>
-<div id="ver">v2026-11-13 ピタゴラ６-4</div>
+<div id="ver">v2026-11-13 ピタゴラ６-5</div>
 
 <script type="module">
 import * as THREE from 'three';
@@ -144,13 +143,12 @@ const CFG = {
   WALL_L: 4, WALL_H: 0.9,   // かべの長さと高さ
   WALL_BOUNCE: 0.95,        // かべで はね返ったあとの速さの わりあい（0〜1）
   DOMINO: { h:1.8, t:0.24, w:1.0, m:0.4, step:1.0 },   // ドミノ：高さ・厚さ・幅・重さ・5まいセットの間隔
-  DOMINO_PUSH_V: 4.5,       // たおれた ドミノに おされた玉の速さ
+  DOMINO_PUSH_V: 3.5,       // たおれた ドミノに おされた玉の速さ
   SPRING_V: [5.5, 7.5, 9.5],    // ばねの強さ（よわい・ふつう・つよい）
   SPRING_HIT: 0.65,         // ばねの台のまん中から、この距離に入った玉を打ち出す
   CHIME_HIT: 0.7,           // てっきんの まん中の線から、この距離までの玉で鳴る
   GOAL_R: 1.15,             // ゴールの半径（この中に入った玉は吸いよせて止める）
   GATE_R: 1.55,             // ゴールの とびら（さく）の半径
-  GUIDE_MAX: 30, GUIDE_K: 0.94,   // よそく線の いちばん長い長さ／長さの ほせい（ころがる時の回転のぶん、実際は少し手前で止まる）
   TIME_LIMIT: 25, MAX_PARTS: 40, MAX_DOMINO: 40, GRID: 0.5
 };
 // 床の大きさ。x＝左右（0〜W）、z＝おく・手前（0がおく、Hが手前）、y＝高さ
@@ -159,28 +157,19 @@ const NOTE_NAMES = ['ド','レ','ミ','ファ','ソ','ラ','シ','ド'];
 // w＝向いている方向の長さ、d＝横幅（えらぶときの当たり判定） rot＝15°きざみで回せる（24で1周） tip＝えらんだときに出る説明
 const PARTS = {
   ramp:   { name:'さか', w:4.2, d:1.6, rot:24, max:3, opt:{ label:'たかさ', names:['ひくい','ふつう','たかい'] }, opt0:1,
-            tip:'さかが <ruby>高<rt>たか</rt></ruby>いほど、<ruby>玉<rt>たま</rt></ruby>は とおくまで いくよ。<ruby>点線<rt>てんせん</rt></ruby>の ◎で とまる' },
+            tip:'さかが <ruby>高<rt>たか</rt></ruby>いほど、<ruby>玉<rt>たま</rt></ruby>は とおくまで いくよ' },
   ball:   { name:'たま', w:1, d:1, max:3, tip:'おいた <ruby>玉<rt>たま</rt></ruby>は じっと している。ドミノや <ruby>玉<rt>たま</rt></ruby>が ぶつかると ころがりだすよ' },
   wall:   { name:'かべ', w:4, d:0.3, rot:24, tip:'かべに あたった <ruby>玉<rt>たま</rt></ruby>は はねかえるよ。↺ ↻ で ななめに すると、<ruby>玉<rt>たま</rt></ruby>の <ruby>向<rt>む</rt></ruby>きが かわる' },
   domino: { name:'ドミノ', w:0.24, d:1.0, rot:24, dom:1, tip:'ドミノは たおれて、つぎの ドミノや <ruby>玉<rt>たま</rt></ruby>を おすよ' },
   domino5:{ name:'ドミノ 5まい', w:4.24, d:1.0, rot:24, dom:5, tip:'ドミノ 5まいの セット。つなげて ならべると、とおくまで つたわるよ' },
   spring: { name:'ばね', w:1.6, d:1.6, rot:24, opt:{ label:'つよさ', names:['よわい','ふつう','つよい'] }, opt0:1,
-            tip:'のった <ruby>玉<rt>たま</rt></ruby>を やじるしの <ruby>向<rt>む</rt></ruby>きに とばすよ。<ruby>点線<rt>てんせん</rt></ruby>が とぶ みち' },
+            tip:'のった <ruby>玉<rt>たま</rt></ruby>を やじるしの <ruby>向<rt>む</rt></ruby>きに とばすよ。やじるしの かずが つよさ' },
   chime:  { name:'てっきん', w:1.8, d:0.5, rot:24, opt:{ label:'おと', names:NOTE_NAMES }, tip:'うえを <ruby>玉<rt>たま</rt></ruby>が とおると おとが なるよ。ボタンで おとを かえられる' },
   goal:   { name:'ゴール', w:2.6, d:2.6, max:1, tip:'ここに <ruby>玉<rt>たま</rt></ruby>が <ruby>入<rt>はい</rt></ruby>れば せいこう！' }
 };
 const ANG = k => (k||0)*Math.PI/12;
 // 向き a のときの「前」は (cos a, 0, -sin a)。a=0 で右、a=90°で おく（画面の上）
 const fwd = a => ({ x:Math.cos(a), z:-Math.sin(a) });
-// よそく線：坂やばねから、玉が まっすぐ進んで止まるまでの線（わくに当たる所で切る）
-function guideOf(p){ let sx,sz,v; const a=ANG(p.rot), f=fwd(a);
-  if(p.type==='ramp'){ sx=p.x+f.x*CFG.RAMP_L/2; sz=p.z+f.z*CFG.RAMP_L/2; v=CFG.RAMP_V[p.opt||0]; }
-  else if(p.type==='spring'){ sx=p.x; sz=p.z; v=CFG.SPRING_V[p.opt||0]; } else return null;
-  let len=Math.min(CFG.GUIDE_MAX, CFG.GUIDE_K*v*v/(2*CFG.ROLL_DECEL)), stop=true; const m=CFG.BALL_R;
-  for(const [c,d,lo,hi] of [[sx,f.x,m,BOARD.W-m],[sz,f.z,m,BOARD.H-m]]){
-    if(d>1e-6&&c+d*len>hi){ len=(hi-c)/d; stop=false; } if(d<-1e-6&&c+d*len<lo){ len=(lo-c)/d; stop=false; } }
-  return { x:sx, z:sz, f, len:Math.max(0,len), stop }; }
-
 // 物理シミュレーション本体（Node.js でも同じコードで検証できるよう、描画と分けています）
 // 床バージョンは完全な3Dの物理です（壁バージョンのような z 固定はしていません）
 function createFloorSim(C, layout, eps){
@@ -258,7 +247,9 @@ function createFloorSim(C, layout, eps){
     while(pushes.length){ const {dom,ball}=pushes.shift(); const w=dom.angularVelocity, bv=ball.velocity;
       if(Math.hypot(w.x,w.z)<1.0||Math.hypot(bv.x,bv.z)>2) continue;   // 立っている ドミノに 玉が ぶつかった ときは なにもしない
       const n=dom.quaternion.vmult(new C.Vec3(1,0,0)); let nx=n.x, nz=n.z; const l=Math.hypot(nx,nz)||1; nx/=l; nz/=l;
-      if((ball.position.x-dom.position.x)*nx+(ball.position.z-dom.position.z)*nz<0){ nx=-nx; nz=-nz; }
+      // ドミノの あたまが うごく向き（＝たおれる向き）。その先に ある玉だけを おす（うしろの 玉は おさない）
+      const tv=w.cross(new C.Vec3(0,1,0)); if(tv.x*nx+tv.z*nz<0){ nx=-nx; nz=-nz; }
+      if((ball.position.x-dom.position.x)*nx+(ball.position.z-dom.position.z)*nz<0) continue;
       const V=CFG.DOMINO_PUSH_V; bv.set(nx*V,0,nz*V); ball.angularVelocity.set(nz*V/R,0,-nx*V/R); }
     // 坂を下りきった玉は、決まった速さにそろえる（毎回同じ距離を進むようにするチート）
     for(const r of ramps){ if(r.done) continue; const p=r.ball.position, v=r.ball.velocity;
@@ -293,7 +284,7 @@ const LEVELS = [
     parts:[ P('ramp',4,13,0,0,'pos'), P('goal',13.5,5,0,0,true) ] },
   { tab:'2', mission:'<ruby>新<rt>あたら</rt></ruby>しい パーツ：<b>ドミノ</b>と<b>たま</b>。<ruby>赤<rt>あか</rt></ruby>い <ruby>玉<rt>たま</rt></ruby>は とちゅうで とまるよ。ドミノで つないで、<ruby>玉<rt>たま</rt></ruby>を おして ゴールへ',
     allow:['domino5','domino','ball'], new:['domino5','domino','ball'],
-    parts:[ P('ramp',3,9,0,0,true), P('goal',24,9,0,0,true) ] },
+    parts:[ P('ramp',3,9,0,0,true), P('goal',22.5,9,0,0,true) ] },
   { tab:'3', mission:'<ruby>新<rt>あたら</rt></ruby>しい パーツ：<b>ばね</b>と<b>てっきん</b>。てっきんを 2こ ならすと ゴールの さくが ひらくよ。ばねで ゴールへ とばそう',
     allow:['chime','spring'], new:['chime','spring'],
     parts:[ P('ramp',3,4,0,0,true), P('goal',20,14,0,2,true) ] },
@@ -426,11 +417,6 @@ function buildWorld(){
       if(d.need>0){ counter=[]; for(let n=0;n<=d.need;n++){ const s=wideLabel(n>=d.need?'♪ ひらいた！':`♪ ${n} / ${d.need}`, n>=d.need?'#2e9e5b':'#ffffff', n>=d.need?'#fff':'#333'); s.position.set(d.x,2.6,d.z); s.visible=n===0; group.add(s); counter.push(s); } } }
     tag(g,d.pi);
   }
-  // よそく線：坂と ばねから、玉が まっすぐ すすんで とまるまでの 点線（つくっている ときだけ）
-  if(state.mode==='edit') for(const p of L){ const gd=guideOf(p); if(!gd||gd.len<0.5) continue;
-    const ang=Math.atan2(-gd.f.z,gd.f.x);
-    for(let t=0.4;t<gd.len-0.2;t+=0.8){ const m=add(GEO_DASH,MAT.dash,gd.x+gd.f.x*t,0.05,gd.z+gd.f.z*t,null,false); m.rotation.y=ang; }
-    if(gd.stop){ const m=add(GEO_STOP,MAT.dash,gd.x+gd.f.x*gd.len,0.06,gd.z+gd.f.z*gd.len,null,false); } }
   // えらんでいるパーツを黄色く光らせる
   if(state.mode==='edit'&&state.sel>=0&&L[state.sel]){ const h=hitBox(state.sel); const m=add(boxGeo(h.w+0.5,0.05,h.d+0.5),MAT.hi,h.x,0.04,h.z,null,false); m.rotation.y=h.a; m.renderOrder=4; }
   syncBodies(); updateExtras();
