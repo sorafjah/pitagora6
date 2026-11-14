@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<!-- ホーム画面に追加して開くと、アドレスバーなしの全画面で表示される -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ピタゴラ６">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -65,6 +69,18 @@ button{font-family:inherit;font-weight:700;border:0;border-radius:12px;min-width
 .box svg{width:100%;height:auto;background:#eef7fc;border-radius:12px}
 #startBtn{display:block;margin:8px auto 0;background:#e8590c;color:#fff;font-size:22px;padding:0 36px;min-height:56px}
 #ver{position:fixed;right:6px;top:58px;font-size:10px;color:#0006;pointer-events:none}
+
+/* ==== スマホ用パネル調整：スマホ（画面が低いとき）だけに効く。iPadには影響しない ==== */
+@media (orientation:landscape) and (max-height:500px), (orientation:portrait) and (max-height:700px){
+  .modal{padding:58px 10px 8px}
+  .box{max-height:calc(100vh - 66px);max-height:calc(100dvh - 66px);padding-top:8px;padding-bottom:0}
+  #startBtn,#introClose{position:sticky;bottom:6px;z-index:5;box-shadow:0 0 0 100vmax #fff;clip-path:inset(-8px -100vmax)}
+}
+@media (orientation:landscape) and (max-height:500px){
+  .box h2{font-size:18px;margin-bottom:4px}
+  .box svg{max-height:56px}
+  .box li{font-size:14px;line-height:1.55;margin-bottom:0}
+}
 </style>
 <script type="importmap">
 {
