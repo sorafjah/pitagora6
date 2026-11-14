@@ -1,0 +1,13 @@
+import { chromium } from 'playwright-core';
+import http from 'http'; import fs from 'fs'; import path from 'path';
+const root=process.cwd();
+const srv=http.createServer((q,r)=>{ const f=path.join(root,decodeURIComponent(q.url.split('?')[0])); fs.readFile(f,(e,d)=>{ if(e){r.writeHead(404);r.end();return;} r.writeHead(200,{'content-type':f.endsWith('.html')?'text/html':'text/javascript'}); r.end(d); }); }).listen(8123);
+const b=await chromium.launch({executablePath:'/usr/bin/google-chrome',args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--no-sandbox']});
+const pg=await b.newPage({viewport:{width:1180,height:820},hasTouch:true});
+const errs=[]; pg.on('pageerror',e=>errs.push('PAGEERR '+e.message)); pg.on('console',m=>{ if(m.type()==='error') errs.push('CONSOLE '+m.text()); });
+await pg.goto('http://localhost:8123/test.html'); await pg.waitForFunction(()=>window.__game&&window.__game.state.frames>3,null,{timeout:30000});
+const out={};
+const steps=(await import(path.join(root,process.argv[2]))).default;
+await steps(pg,out);
+console.log(JSON.stringify(out,null,1)); console.log(errs.join('\n')||'no errors');
+await b.close(); srv.close();
