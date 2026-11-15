@@ -4,8 +4,11 @@ const VIEW = { AZ: 0, EL: 0.95, EL_MIN: 0.45, EL_MAX: 1.45, AZ_MAX: 0.9, NEAR_DI
 const $ = id => document.getElementById(id);
 const clone = a => a.map(p=>Object.assign({},p));
 
-const state = { mode:'edit', level:0, sel:-1, paused:true, slow:false, camFar:true, camFree:false,
-  frames:0, elapsed:0, status:'', viewT:0, cleared:[false,false,false,false] };
+// screen：'home'＝さいしょの ページ、'game'＝あそんでいる画面
+// level：0〜2＝れんしゅう、3（LV_FREE）＝つくる、4（LV_WATCH）＝みる、5（LV_FIX）＝なおして ゴール
+const state = { mode:'edit', level:0, sel:-1, paused:true, slow:false, camFar:true, camFree:false, screen:'home',
+  frames:0, elapsed:0, status:'', viewT:0, cleared:LEVELS.map(()=>false),
+  watchI:0, watchRandom:false, fixN:1, fixInit:null, fixAnswer:null, hint:false, busy:false };
 const layouts = LEVELS.map(l=>clone(l.free?SAMPLE:l.parts));
 const BL = () => LEVELS[state.level];
 const layout = () => layouts[state.level];
@@ -52,6 +55,9 @@ const MAT={
   spring:std({color:0xf08c00,roughness:0.4}), springbase:std({color:0xc76a00,roughness:0.5}), coil:std({map:TEX.coil,metalness:0.4,roughness:0.4}),
   gate:std({color:0x868e96,roughness:0.4,metalness:0.4}), dash:new THREE.MeshBasicMaterial({color:0x1c7ed6,transparent:true,opacity:0.7}), arrow:std({color:0xffe066,roughness:0.4}),
   guide:new THREE.MeshBasicMaterial({color:0xf2c200,transparent:true,opacity:0.75}),
+  tray:new THREE.MeshBasicMaterial({color:0x9fd3f0,transparent:true,opacity:0.55}),
+  ghost:new THREE.MeshBasicMaterial({color:0x40c057,transparent:true,opacity:0.45,depthWrite:false}),
+  ghostArrow:new THREE.MeshBasicMaterial({color:0x2b8a3e,transparent:true,opacity:0.8}),
   board:std({map:TEX.board,roughness:1}), floor:std({map:TEX.floor,roughness:1}), pole:std({color:0x666666}),
   hi:new THREE.MeshBasicMaterial({color:0xffe600,transparent:true,opacity:0.35,depthTest:false}),
   conf:BAR_COL.map(c=>new THREE.MeshBasicMaterial({color:c,side:THREE.DoubleSide}))
@@ -119,6 +125,17 @@ function buildWorld(){
       if(d.need>0){ counter=[]; for(let n=0;n<=d.need;n++){ const s=wideLabel(n>=d.need?'♪ ひらいた！':`♪ ${n} / ${d.need}`, n>=d.need?'#2e9e5b':'#ffffff', n>=d.need?'#fff':'#333'); s.position.set(d.x,2.6,d.z); s.visible=n===0; group.add(s); counter.push(s); } } }
     tag(g,d.pi);
   }
+  if(BL().fix){
+    // 手前の「おきば」と、うごかせる パーツの ✋ じるし
+    const tz=TRAY_Z, t=add(planeGeo(BOARD.W-1.2,2.8),MAT.tray,BOARD.W/2,0.015,tz,null,false); t.rotation.x=-Math.PI/2;
+    const lb=wideLabel('おきば','#ffffff','#333'); lb.position.set(2.4,1.0,tz-1.6); lb.scale.set(2.6,0.8,1); group.add(lb);
+    L.forEach((p,i)=>{ if(p.lock) return; const s=label('✋','#ffffff','#333',0.9); s.position.set(p.x,2.3,p.z); group.add(s); });
+    // ヒント：おく ばしょを 光らせる（やじるしは ばねの 向き）
+    if(state.hint&&state.fixAnswer) for(const an of state.fixAnswer){ const p=L[an.i]; if(!p) continue; const sp=PARTS[p.type], a=ANG(an.rot);
+      const gg=new THREE.Group(); gg.position.set(an.x,0,an.z); gg.rotation.y=a; group.add(gg);
+      const m=add(boxGeo(sp.w+0.2,0.06,sp.d+0.2),MAT.ghost,0,0.05,0,gg,false); m.renderOrder=3;
+      if(p.type==='spring') add(arrowGeo(1.6,1.0),MAT.ghostArrow,-0.6,0.1,0,gg,false); }
+  }
   // えらんでいるパーツを黄色く光らせる
   if(state.mode==='edit'&&state.sel>=0&&L[state.sel]){ const h=hitBox(state.sel); const m=add(boxGeo(h.w+0.5,0.05,h.d+0.5),MAT.hi,h.x,0.04,h.z,null,false); m.rotation.y=h.a; m.renderOrder=4; }
   syncBodies(); updateExtras();
@@ -181,7 +198,9 @@ function finish(){ state.status=sim.status; setMode('done');
   const b=$('banner'), bb=$('bannerBtn'); b.style.display='flex'; b.className=sim.status;
   if(sim.status==='win'){ state.cleared[state.level]=true; $('bannerTxt').innerHTML='🎉 だいせいこう！';
     if(BL().free){ bb.innerHTML='つづける'; bb.onclick=toEdit; }
-    else { const nx=state.level+1; bb.innerHTML=LEVELS[nx].free?'じゆうに つくる':'つぎの レベルへ'; bb.onclick=()=>setLevel(nx); }
+    else if(BL().watch){ bb.innerHTML=state.watchRandom?'🎲 べつのを つくる':'つぎを <ruby>見<rt>み</rt></ruby>る'; bb.onclick=()=>{ if(state.watchRandom) randomWatch(); else showWatch(state.watchI+1); }; }
+    else if(BL().fix){ $('bannerTxt').innerHTML='🎉 なおせた！ だいせいこう！'; bb.innerHTML='つぎの もんだい'; bb.onclick=()=>newPuzzle(state.fixN); }
+    else { const nx=state.level+1; bb.innerHTML=nx===LV_FREE?'つくるモードへ':'つぎの レベルへ'; bb.onclick=()=>setLevel(nx); }
   } else { const got=sim.rung.size, need=sim.info.gateNeed;
     $('bannerTxt').innerHTML= sim.failWhy==='gate' ? `ざんねん！ てっきんが ${got}こ しか ならなかったので、さくが ひらかなかったよ`
       : 'ざんねん！ ゴールに <ruby>入<rt>はい</rt></ruby>らなかったよ'; bb.innerHTML='なおす'; bb.onclick=toEdit; }
@@ -207,7 +226,9 @@ function placeCam(x,z,dist){ const ce=Math.cos(cam.el);
 // 床ぜんたいが、上のバーと下のパネルの間にちょうど入る距離を、実際に映してみて探す
 const _v=new THREE.Vector3();
 const FIT_PTS=[]; for(const x of [-1.2,BOARD.W+1.2]) for(const z of [-1.2,BOARD.H+1.2]) for(const y of [0,1.2]) FIT_PTS.push([x,y,z]);
-function boardFits(dist){ placeCam(BOARD.W/2,BOARD.H/2,dist); const Hh=window.innerHeight, yT=1-2*freeTop/Hh, yB=-(1-2*(freeBot+VIEW.SEL_ROOM)/Hh);   // 下は、えらんだときに出るボタンの分もあけておく
+// スマホ（横向き）かどうか。CSS の @media と同じ条件
+const PHONE_L=window.matchMedia('(orientation:landscape) and (max-height:500px)');
+function boardFits(dist){ placeCam(BOARD.W/2,BOARD.H/2,dist); const Hh=window.innerHeight, yT=1-2*freeTop/Hh, yB=-(1-2*(freeBot+(PHONE_L.matches?0:VIEW.SEL_ROOM))/Hh);   // スマホ横は せまいので、ボタンの分は あけない   // 下は、えらんだときに出るボタンの分もあけておく
   for(const p of FIT_PTS){ _v.set(p[0],p[1],p[2]).project(camera); if(Math.abs(_v.x)>0.985||_v.y>yT||_v.y<yB) return false; } return true; }
 function fitDist(){ let lo=8, hi=260; for(let i=0;i<14;i++){ const m=(lo+hi)/2; if(boardFits(m)) hi=m; else lo=m; } return hi; }
 function followTarget(){ // いちばん大きく動いた玉を追いかける
@@ -237,22 +258,42 @@ const ICON={
   spring:'<rect x="10" y="4" width="28" height="26" rx="3" fill="#c76a00"/><path d="M15 13 h10 v-5 l11 9 l-11 9 v-5 h-10z" fill="#ffe066"/>',
   chime:'<rect x="6" y="14" width="26" height="7" rx="3" fill="#1c7ed6"/><text x="35" y="16" font-size="16" fill="#333">♪</text>'
 };
+function wbtn(html,fn,id){ const b=document.createElement('button'); b.className='wbtn'; b.innerHTML=html; if(id) b.id=id; b.addEventListener('click',()=>{ audioOn(); fn(); }); $('palette').appendChild(b); return b; }
 function buildPalette(){ const el=$('palette'); el.innerHTML='';
+  if(BL().watch){
+    wbtn('<span class="big">◀</span>まえ',()=>showWatch(state.watchI-1));
+    const nm=document.createElement('div'); nm.className='wname'; nm.id='watchName'; el.appendChild(nm);
+    wbtn('<span class="big">▶</span>つぎ',()=>showWatch(state.watchI+1));
+    wbtn('<span class="big">🎲</span>おまかせ',randomWatch);
+    wbtn('<span class="big">✏️</span>つくるで かえる',editWatched);
+    return; }
+  if(BL().fix){
+    wbtn('<span class="big">💡</span>ヒント',()=>{ state.hint=!state.hint; changed(); },'hintBtn');
+    wbtn('<span class="big">🔄</span>べつの もんだい',()=>newPuzzle(state.fixN));
+    const nm=document.createElement('div'); nm.className='wname'; nm.id='fixName'; el.appendChild(nm);
+    return; }
   BL().allow.forEach(t=>{ const b=document.createElement('button'); b.className='pbtn'; b.dataset.t=t;
     const nw=(BL().new||[]).includes(t); b.classList.toggle('isnew',nw);
     b.innerHTML=`<svg viewBox="0 0 48 34">${ICON[t]}</svg>${PARTS[t].name}${nw?'<span class="nw">NEW</span>':''}`; b.addEventListener('click',()=>{ audioOn(); addPart(t); }); el.appendChild(b); }); }
 let toastT=0;
 function toast(msg){ const t=$('toast'); t.innerHTML=msg; t.style.display='block'; clearTimeout(toastT); toastT=setTimeout(()=>t.style.display='none',1600); }
+function missionText(){ const B=BL();
+  if(B.watch) return state.watchRandom?'🎲 コンピューターが つくった そうち。▶スタートで うごかそう':`<b>${SHOWCASE[state.watchI].name}</b> ${SHOWCASE[state.watchI].desc}`;
+  if(B.fix) return '🔧 ✋の パーツを うごかして、そうちを なおそう。ゴールまで つながるかな？';
+  return (B.tab&&!B.free?'レベル'+B.tab+'　':'')+B.mission; }
 function refreshUI(){
-  document.querySelectorAll('.lv').forEach(b=>{ const l=+b.dataset.lv; b.classList.toggle('on',l===state.level); b.textContent=(state.cleared[l]?'⭐':'')+(LEVELS[l].free?'じゆう':'レベル'+LEVELS[l].tab); });
+  if($('watchName')) $('watchName').innerHTML=state.watchRandom?'🎲':`${state.watchI+1} / ${SHOWCASE.length}`;
+  if($('fixName')) $('fixName').textContent=['','かんたん','ふつう','むずかしい'][state.fixN];
+  if($('hintBtn')) $('hintBtn').classList.toggle('on',state.hint);
   $('slowBtn').classList.toggle('on',state.slow); $('viewBtn').classList.toggle('on',state.camFree); $('camBtn').classList.toggle('on',!state.camFar);
-  $('mission').innerHTML=BL().mission; $('mission').style.display=state.mode==='done'?'none':'block';
-  const cb=$('clearBtn'); if(!cb.classList.contains('warn')) cb.textContent=BL().free?'🧹 ぜんぶ けす':'↩ さいしょから';
+  $('mission').innerHTML=missionText(); $('mission').style.display=state.mode==='done'?'none':'block';
+  const cb=$('clearBtn'); cb.style.display=BL().watch?'none':''; if(!cb.classList.contains('warn')) cb.textContent=BL().free?'🧹 ぜんぶ けす':'↩ さいしょから';
   const sb=$('selbar'), p=state.mode==='edit'&&state.sel>=0?layout()[state.sel]:null;
   sb.style.display=p?'flex':'none';
   if(p){ const sp=PARTS[p.type]; $('selName').textContent=sp.name;
-    $('rotL').style.display=$('rotR').style.display=sp.rot&&!p.lock?'':'none'; $('delBtn').style.display=p.lock?'none':'';
-    $('optBtn').style.display=sp.opt?'':'none'; if(sp.opt) $('optBtn').textContent=sp.opt.label+'：'+sp.opt.names[p.opt||0]; }
+    $('rotL').style.display=$('rotR').style.display=sp.rot&&!p.lock?'':'none'; $('delBtn').style.display=p.lock||BL().fix?'none':'';
+    // なおして ゴールでは、つよさ・おとは もとのまま（答えが かわらないように）
+    $('optBtn').style.display=sp.opt&&!BL().fix?'':'none'; if(sp.opt) $('optBtn').textContent=sp.opt.label+'：'+sp.opt.names[p.opt||0]; }
   const tp=$('tip'); if(p&&PARTS[p.type].tip){ tp.innerHTML=PARTS[p.type].tip; tp.style.display='block'; } else tp.style.display='none';
 }
 // ---------- パーツの編集 ----------
@@ -276,13 +317,13 @@ function movePart(i,x,z){ const p=layout()[i]; if(!p||p.lock) return;
   if(x!==p.x||z!==p.z){ p.x=x; p.z=z; changed(); } }
 function rotatePart(d){ const p=layout()[state.sel]; if(!p||p.lock) return; if(!PARTS[p.type].rot) return;
   p.rot=((p.rot+d+12)%24+24)%24-12; changed(); }
-function cycleOpt(){ const p=layout()[state.sel]; if(!p||p.lock===true) return; const sp=PARTS[p.type]; if(!sp.opt) return;
+function cycleOpt(){ const p=layout()[state.sel]; if(!p||p.lock===true||BL().fix) return; const sp=PARTS[p.type]; if(!sp.opt) return;
   p.opt=((p.opt||0)+1)%sp.opt.names.length; if(p.type==='chime') playEvent({k:'bar',i:p.opt}); changed(); }
-function deletePart(){ const L=layout(), p=L[state.sel]; if(!p||p.lock) return;
+function deletePart(){ const L=layout(), p=L[state.sel]; if(!p||p.lock||BL().fix) return;
   if(p.type==='goal'){ toast('ゴールは けせないよ'); return; }
   if(p.type==='ramp'&&L.filter(q=>q.type==='ramp').length<=1){ toast('スタートの さかは 1こ いるよ'); return; }
   L.splice(state.sel,1); state.sel=-1; changed(); }
-function resetLayout(){ layouts[state.level]=clone(BL().free?FREE_EMPTY:BL().parts); state.sel=-1; toEdit(); }
+function resetLayout(){ layouts[state.level]=clone(BL().free?FREE_EMPTY:BL().fix?(state.fixInit||[]):BL().parts); state.sel=-1; toEdit(); }
 const ray=new THREE.Raycaster(), ndc=new THREE.Vector2(), floorPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
 function setRay(e){ const r=canvas.getBoundingClientRect(); ndc.set((e.clientX-r.left)/r.width*2-1,-((e.clientY-r.top)/r.height)*2+1); ray.setFromCamera(ndc,camera); }
 function floorPoint(){ return ray.ray.intersectPlane(floorPlane,new THREE.Vector3()); }
@@ -294,7 +335,7 @@ function pick(pt){ const hit=ray.intersectObjects(pickables,true)[0]; if(hit&&hi
   return best; }
 let drag=null;
 canvas.addEventListener('pointerdown',e=>{ try{ canvas.setPointerCapture(e.pointerId); }catch(_){}
-  if(state.mode==='edit'){ setRay(e); const pt=floorPoint(), i=pick(pt);
+  if(state.mode==='edit'&&!BL().watch){ setRay(e); const pt=floorPoint(), i=pick(pt);   // 「みる」では パーツを さわらない
     if(i>=0){ const p=layout()[i]; if(p.lock===true){ toast('🔒 これは うごかせないよ'); return; }
       if(p.lock==='pos'){ state.sel=i; drag=null; changed(); toast('📌 これは ばしょが きまっているよ。せっていだけ かえられる'); return; }
       state.sel=i; drag=pt?{part:i,ox:p.x-pt.x,oz:p.z-pt.z}:null; changed(); return; }
@@ -316,9 +357,67 @@ let clearT=0;
 $('clearBtn').addEventListener('click',()=>{ const b=$('clearBtn');   // 2回おして実行（まちがい防止）
   if(b.classList.contains('warn')){ clearTimeout(clearT); b.classList.remove('warn'); resetLayout(); }
   else { b.classList.add('warn'); b.textContent='もう1かい おすと けす'; clearT=setTimeout(()=>{ b.classList.remove('warn'); refreshUI(); },2500); } });
-document.querySelectorAll('.lv').forEach(b=>b.addEventListener('click',()=>{ audioOn(); setLevel(+b.dataset.lv); }));
-$('helpBtn').addEventListener('click',()=>{ $('help').classList.add('open'); state.paused=true; });
-$('startBtn').addEventListener('click',()=>{ audioOn(); $('help').classList.remove('open'); state.paused=false; });
+$('helpBtn').addEventListener('click',()=>openHelp(helpKind()));
+$('homeHelp').addEventListener('click',()=>openHelp('home'));
+$('startBtn').addEventListener('click',()=>{ audioOn(); $('help').classList.remove('open'); state.paused=state.screen!=='game'; });
+$('homeBtn').addEventListener('click',()=>{ audioOn(); showHome(); });
+document.querySelectorAll('#home [data-go]').forEach(b=>b.addEventListener('click',()=>{ audioOn(); enterMode(b.dataset.go,+(b.dataset.n||0)); }));
+
+// ---------- さいしょの ページと モード ----------
+function showHome(){ genJob++; state.busy=false; $('busy').classList.remove('open');
+  if(state.mode!=='edit') toEdit(); state.screen='home'; state.paused=true; $('home').classList.remove('hide');
+  document.querySelectorAll('#home [data-go=lesson]').forEach(b=>{ const n=+b.dataset.n; b.textContent=(state.cleared[n]?'⭐ ':'')+'レベル'+(n+1); }); }
+function enterMode(m,n){ state.screen='game'; $('home').classList.add('hide');
+  if(m==='lesson') setLevel(n);
+  else if(m==='free') setLevel(LV_FREE);
+  else if(m==='watch'){ state.watchRandom=false; state.watchI=0; layouts[LV_WATCH]=clone(SHOWCASE[0].parts); setLevel(LV_WATCH); }
+  else if(m==='fix'){ state.fixN=n||1; newPuzzle(state.fixN); }
+  openHelp(m); }
+function showWatch(i){ const n=SHOWCASE.length; state.watchI=((i%n)+n)%n; state.watchRandom=false; layouts[LV_WATCH]=clone(SHOWCASE[state.watchI].parts); setLevel(LV_WATCH); }
+function editWatched(){ layouts[LV_FREE]=layout().map(p=>({type:p.type,x:p.x,z:p.z,rot:p.rot,opt:p.opt,lock:false})); setLevel(LV_FREE); toast('つくるモードで なおせるよ'); }
+// 完成品を ランダムに つくる。画面が かたまらないように、少しずつ ためす
+let genJob=0;
+function genAsync(opt,done){ const job=++genJob, rng=makeRng((Date.now()*7919+Math.floor(Math.random()*1e9))>>>0); let tries=0;
+  state.busy=true; $('busy').classList.add('open');
+  const end=()=>{ state.busy=false; $('busy').classList.remove('open'); };
+  const stepFn=()=>{ if(job!==genJob) return; const t0=performance.now();
+    while(performance.now()-t0<40){ tries++; const L=planMachine(rng,opt);
+      if(L&&verifyMachine(CANNON,L)){ end(); done(L,rng); return; }
+      if(tries>GEN.TRIES*3){ end(); toast('うまく つくれなかったよ。もう1かい おしてね'); return; } }
+    setTimeout(stepFn,0); };
+  setTimeout(stepFn,30); }
+function randomWatch(){ genAsync({},L=>{ state.watchRandom=true; layouts[LV_WATCH]=L; setLevel(LV_WATCH); }); }
+function newPuzzle(n){ state.fixN=n; state.hint=false;
+  if(state.level!==LV_FIX){ layouts[LV_FIX]=[]; state.fixInit=[]; state.fixAnswer=null; setLevel(LV_FIX); }
+  genAsync({zMax:TRAY_Z-2.2},(L,rng)=>{ const pz=makePuzzle(CANNON,L,n,rng); if(!pz){ newPuzzle(n); return; }
+    state.fixInit=pz.layout; state.fixAnswer=pz.answer; layouts[LV_FIX]=clone(pz.layout); setLevel(LV_FIX); }); }
+// ---------- あそびかたの せつめい（モードごと） ----------
+const HELP={
+  place:'<span class="ic">🧩</span><ruby>下<rt>した</rt></ruby>の パーツを おすと、ゆかに <ruby>出<rt>で</rt></ruby>てくる',
+  move:'<span class="ic">👆</span>ゆびで うごかす。↺ ↻ で むきを かえる',
+  start:'<span class="ic">▶</span>「スタート」で <ruby>玉<rt>たま</rt></ruby>が さかを ころがる。ゴールに <ruby>入<rt>はい</rt></ruby>れば せいこう！',
+  time:'<span class="ic">⏪</span><ruby>止<rt>と</rt></ruby>まったら「<ruby>時間<rt>じかん</rt></ruby>」の バーで まきもどして、たしかめよう',
+  lesson:'<span class="ic">🆕</span>あたらしい パーツを ひとつずつ おぼえる れんしゅう。<span style="background:#e03131;color:#fff;border-radius:8px;padding:0 6px;font-size:13px">NEW</span>の パーツを つかってみよう',
+  view:'<span class="ic">🔄</span>「<ruby>視点<rt>してん</rt></ruby>」ボタンを おすと、なにも ない ところを ゆびで なぞって <ruby>見<rt>み</rt></ruby>る むきを かえられる（もう1<ruby>回<rt>かい</rt></ruby>おすと もどる）',
+  home:'<span class="ic">🏠</span>を おすと、さいしょの ページに もどる',
+  w1:'<span class="ic">👀</span>できあがった そうちを「スタート」で うごかして <ruby>見<rt>み</rt></ruby>よう',
+  w2:'<span class="ic">◀▶</span>「まえ」「つぎ」で ほかの そうちに かえる',
+  w3:'<span class="ic">🎲</span>「おまかせ」を おすと、コンピューターが あたらしい そうちを つくるよ',
+  w4:'<span class="ic">✏️</span>「つくるで かえる」を おすと、その そうちを じぶんで なおして あそべる',
+  f1:'<span class="ic">🔧</span>そうちから パーツが いくつか ぬけて、<ruby>手前<rt>てまえ</rt></ruby>の「おきば」に おいてあるよ',
+  f2:'<span class="ic">✋</span>✋の パーツを ゆびで うごかして、↺ ↻ で むきを あわせよう',
+  f3:'<span class="ic">💡</span>「ヒント」を おすと、おく ばしょが みどりに <ruby>光<rt>ひか</rt></ruby>るよ',
+  m1:'<span class="ic">🔰</span><b>れんしゅう</b>：パーツの つかいかたを レベル1〜3で おぼえる',
+  m2:'<span class="ic">👀</span><b>みる</b>：できあがった そうちを <ruby>見<rt>み</rt></ruby>る',
+  m3:'<span class="ic">🛠️</span><b>つくる</b>：すきな そうちを つくる',
+  m4:'<span class="ic">🔧</span><b>なおして ゴール</b>：ぬけた パーツを もどして、そうちを なおす'
+};
+const HELP_SET={ home:['m1','m2','m3','m4','start','time'], lesson:['place','move','start','lesson','time','home'], free:['place','move','start','time','view','home'],
+  watch:['w1','w2','w3','w4','time','home'], fix:['f1','f2','start','f3','time','home'] };
+const HELP_SUB={ home:'', lesson:'🔰 れんしゅう', free:'🛠️ つくる', watch:'👀 みる', fix:'🔧 なおして ゴール' };
+function helpKind(){ const B=BL(); return state.screen!=='game'?'home':B.watch?'watch':B.fix?'fix':B.free?'free':'lesson'; }
+function openHelp(k){ $('helpList').innerHTML=HELP_SET[k].map(i=>`<li>${HELP[i]}</li>`).join(''); const sb=$('helpSub'); sb.textContent=HELP_SUB[k]; sb.style.display=HELP_SUB[k]?'':'none';
+  $('startBtn').textContent=k==='home'?'とじる':'はじめる'; $('help').classList.add('open'); state.paused=true; }
 
 // ---------- iPad対策（拡大・スクロール防止） ----------
 document.addEventListener('gesturestart',e=>e.preventDefault());
@@ -334,7 +433,11 @@ window.__game={ state, camera, cam, CFG, PARTS, BOARD, LEVELS, SAMPLE, layouts, 
   api:{ tick(n,dt){ for(let i=0;i<(n||1);i++) advance(dt||1/60); renderer.render(scene,camera); return this.getState(); },
     getState(){ return {mode:state.mode,level:state.level,sel:state.sel,status:state.status,t:sim.t,frames:state.frames,parts:layout().length,
       balls:sim.dyn.filter(d=>d.kind==='ball').map(d=>({x:d.body.position.x,y:d.body.position.y,z:d.body.position.z}))}; },
-    setLevel, start(){ state.paused=false; $('help').classList.remove('open'); start(); }, reset(){ toEdit(); },
+    setLevel, start(){ state.paused=false; state.screen='game'; $('home').classList.add('hide'); $('help').classList.remove('open'); start(); }, reset(){ toEdit(); },
+    home:showHome, enter(m,n){ enterMode(m,n); }, closeHelp(){ $('startBtn').click(); }, showWatch, randomWatch, newPuzzle, editWatched,
+    get busy(){ return state.busy; }, fix(){ return {init:state.fixInit, answer:state.fixAnswer, n:state.fixN}; },
+    // なおして ゴールの 答えどおりに パーツを もどす（テスト用）
+    solveFix(){ const L=layout(); for(const an of state.fixAnswer||[]) Object.assign(L[an.i],{x:an.x,z:an.z,rot:an.rot}); toEdit(); },
     getLayout(){ return clone(layout()); }, setLayout(a){ layouts[state.level]=clone(a); state.sel=-1; toEdit(); },
     addPart, movePart, select(i){ state.sel=i; changed(); }, rotate:rotatePart, cycleOpt, deletePart, resetLayout,
     scrub(n){ $('time').value=n; },
@@ -348,7 +451,7 @@ function boot(){
   MAT.flag=new THREE.MeshBasicMaterial({map:TEX.flag,side:THREE.DoubleSide});
   setLevel(0); cam.dist=fitDist();
   let last=performance.now();
-  renderer.setAnimationLoop(now=>{ const dt=Math.min((now-last)/1000,1/30); last=now; advance(dt); renderer.render(scene,camera); });
+  renderer.setAnimationLoop(now=>{ const dt=Math.min((now-last)/1000,1/30); last=now; advance(dt); if(state.screen==='game') renderer.render(scene,camera); });
 }
 let booted=false; const once=()=>{ if(!booted){ booted=true; boot(); } };
 (document.fonts&&document.fonts.load?document.fonts.load('700 40px "BIZ UDPGothic"','ピタゴラ６１２３'):Promise.resolve()).then(once,once); setTimeout(once,1500);

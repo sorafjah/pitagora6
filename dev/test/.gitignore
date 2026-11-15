@@ -1,2 +1,5 @@
 node_modules/
 test.html
+*.png
+package.json
+package-lock.json

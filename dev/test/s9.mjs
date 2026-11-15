@@ -6,7 +6,7 @@ async function place(pg,type,x,z,rotClicks){ await pg.click(`.pbtn[data-t=${type
   const L=await pg.evaluate(()=>__game.api.getLayout()), p=L[L.length-1]; await dragTo(pg,await scr(pg,p.x,p.z,0.2),await scr(pg,x,z,0.2));
   return (await pg.evaluate(()=>__game.api.getLayout())).pop(); }
 export default async function(pg,out){
-  await pg.click('#startBtn'); await pg.evaluate(()=>__game.api.tick(90));
+  await pg.click('#home [data-go=lesson][data-n="0"]'); await pg.click('#startBtn'); await pg.evaluate(()=>__game.api.tick(90));
   out.l1sel=await pg.evaluate(()=>__game.state.sel); out.l1tip=(await pg.textContent('#tip')).slice(0,20);
   await pg.screenshot({path:'p_l1.png'});
   // さかは ドラッグしても うごかない
